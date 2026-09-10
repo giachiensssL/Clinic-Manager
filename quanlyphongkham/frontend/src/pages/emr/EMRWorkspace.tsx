@@ -10,6 +10,15 @@ import { Activity, Clock, FileSignature, AlertCircle, Bot, Lock } from 'lucide-r
 import { appointmentsAPI, patientsAPI, emrAPI } from '@/services/api';
 import { format } from 'date-fns';
 
+const STATUS_MAP: Record<string, { label: string; class: string }> = {
+  scheduled: { label: 'Đã đặt', class: 'text-blue-600 bg-blue-50' },
+  waiting: { label: 'Chờ khám', class: 'text-amber-600 bg-amber-50' },
+  in_consultation: { label: 'Đang khám', class: 'text-purple-600 bg-purple-50' },
+  completed: { label: 'Hoàn thành', class: 'text-green-600 bg-green-50' },
+  paid: { label: 'Đã thanh toán', class: 'text-teal-600 bg-teal-50' },
+  cancelled: { label: 'Đã hủy', class: 'text-red-600 bg-red-50' },
+};
+
 export default function EMRWorkspace() {
   const [selectedApt, setSelectedApt] = useState<any>(null);
 
@@ -38,7 +47,9 @@ export default function EMRWorkspace() {
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {appointments.length === 0 ? (
             <div className="p-4 text-center text-sm text-slate-500">Không có lịch khám hôm nay</div>
-          ) : appointments.map((apt: any) => (
+          ) : appointments.map((apt: any) => {
+            const st = STATUS_MAP[apt.status] || { label: apt.status, class: 'text-slate-600 bg-slate-50' };
+            return (
             <div 
               key={apt.id} 
               onClick={() => setSelectedApt(apt)}
@@ -46,11 +57,14 @@ export default function EMRWorkspace() {
             >
               <div className="flex justify-between items-start mb-1">
                 <span className={`font-medium ${selectedApt?.id === apt.id ? 'text-purple-900 font-bold' : 'text-slate-800'}`}>{apt.patient?.full_name}</span>
-                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{apt.start_time}</span>
+                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{apt.start_time?.slice(0, 5)}</span>
               </div>
-              <p className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> Trạng thái: {apt.status}</p>
+              <p className={`text-xs flex items-center gap-1 w-fit px-1.5 py-0.5 rounded ${st.class}`}>
+                <Clock className="w-3 h-3" /> {st.label}
+              </p>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

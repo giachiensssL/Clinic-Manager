@@ -378,14 +378,15 @@ class AIService:
                 system_instruction=system_instruction
             )
 
-            def _generate_sync():
-                return list(model.generate_content(message, stream=True))
+            # Khong dung list() de tranh block toan bo
+            response = await asyncio.to_thread(
+                model.generate_content, message, stream=True
+            )
 
-            chunks = await asyncio.to_thread(_generate_sync)
-            for chunk in chunks:
+            for chunk in response:
                 if hasattr(chunk, 'text') and chunk.text:
                     yield chunk.text
-                    await asyncio.sleep(0.02)
+                    await asyncio.sleep(0.01)
         except Exception as e:
             yield "Xin lỗi, hệ thống AI tạm thời không khả dụng. Vui lòng liên hệ lễ tân để được hỗ trợ trực tiếp."
 

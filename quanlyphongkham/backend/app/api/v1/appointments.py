@@ -81,20 +81,33 @@ async def list_appointments(
     query = query.order_by(Appointment.appointment_date.desc(), Appointment.start_time).offset(offset).limit(size)
     appointments = (await db.execute(query)).scalars().all()
 
-    items = [
-        {
+    items = []
+    for a in appointments:
+        pat = a.patient
+        doc = a.doctor
+        items.append({
             "id": a.id,
             "appointment_code": a.appointment_code,
-            "patient_name": a.patient.full_name if a.patient else None,
-            "doctor_name": a.doctor.staff.full_name if a.doctor and a.doctor.staff else None,
             "appointment_date": a.appointment_date.isoformat(),
             "start_time": a.start_time.isoformat(),
             "end_time": a.end_time.isoformat(),
             "status": a.status.value,
             "reason": a.reason,
-        }
-        for a in appointments
-    ]
+            "patient": {
+                "id": pat.id,
+                "full_name": pat.full_name,
+                "patient_code": pat.patient_code,
+                "phone": pat.phone,
+                "gender": pat.gender,
+                "blood_type": pat.blood_type,
+                "allergies": pat.allergies,
+            } if pat else None,
+            "doctor": {
+                "id": doc.id,
+                "full_name": doc.staff.full_name if doc.staff else "N/A",
+                "specialty": doc.specialty.name if doc.specialty else None
+            } if doc else None,
+        })
 
     return {"items": items, "total": total, "page": page, "size": size, "pages": (total + size - 1) // size}
 

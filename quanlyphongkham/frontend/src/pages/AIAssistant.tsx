@@ -55,7 +55,6 @@ export default function AIAssistant() {
     setInput('');
     setIsLoading(true);
 
-    // Add loading placeholder
     const loadingId = Date.now() + 1;
     setMessages(prev => [
       ...prev,
@@ -63,40 +62,46 @@ export default function AIAssistant() {
     ]);
 
     try {
-      const res = await aiAPI.chat({
-        message: userMessage,
-        conversation_id: conversationId,
-      });
-
-      const data = res.data;
-      setConversationId(data.conversation_id);
-
+      const response = await aiAPI.streamChat(userMessage, conversationId);
+      
+      if (!response.ok) {
+        throw new Error(`Lỗi server: ${response.status}`);
+      }
+      
+      if (!response.body) throw new Error("No response body");
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      
       setMessages(prev =>
         prev.map(m =>
-          m.id === loadingId
-            ? {
-                id: loadingId,
-                role: 'assistant',
-                content: data.response,
-                isGuardrail: data.guardrail_blocked,
-                isLoading: false,
-              }
-            : m
+          m.id === loadingId ? { ...m, isLoading: false } : m
         )
       );
-    } catch (err: any) {
-      // Fallback nếu backend không kết nối được
-      const fallbackMsg = err.response
-        ? `Lỗi từ server: ${err.response.data?.detail || 'Không xác định'}`
-        : 'Không kết nối được server. Vui lòng kiểm tra backend đang chạy.';
 
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunkStr = decoder.decode(value, { stream: true });
+        
+        // chunkStr can contain multiple chunks if they arrived fast, but for simple Gemini streaming
+        // it just yields text directly. If backend sends raw text, we just append.
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === loadingId ? { ...m, content: m.content + chunkStr } : m
+          )
+        );
+      }
+      
+    } catch (err: any) {
       setMessages(prev =>
         prev.map(m =>
           m.id === loadingId
             ? {
                 id: loadingId,
                 role: 'assistant',
-                content: fallbackMsg,
+                content: `Lỗi từ server: ${err.message}`,
                 isGuardrail: false,
                 isLoading: false,
               }

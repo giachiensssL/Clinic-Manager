@@ -88,12 +88,18 @@ export const billingAPI = {
 export const aiAPI = {
   chat: (data: { message: string; conversation_id?: string }) => api.post('/ai/chat', data),
   summarize: (patientId: string) => api.post('/ai/summarize', { patient_id: patientId }),
-  streamUrl: (message: string, conversationId?: string) => {
+  streamChat: async (message: string, conversationId?: string) => {
     const token = localStorage.getItem('access_token');
     const base = import.meta.env.VITE_API_URL || '';
     const params = new URLSearchParams({ message });
     if (conversationId) params.append('conversation_id', conversationId);
-    return `${base}/api/v1/ai/chat/stream?${params}&token=${token}`;
+    
+    return fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      }
+    });
   },
 };
 
