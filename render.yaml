@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: clinic-manager-backend
+    runtime: python
+    rootDir: quanlyphongkham/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./clinic.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: JWT_REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
+      - key: AI_MODE
+        value: production
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        value: ""
+      - key: CLAUDE_API_KEY
+        value: ""
+      - key: BACKEND_CORS_ORIGINS
+        value: '["https://clinic-manager-swart.vercel.app","http://localhost:5173","http://localhost:3000"]'
+      - key: SECRET_KEY
+        generateValue: true
+      - key: QDRANT_URL
+        value: http://localhost:6333
+      - key: QDRANT_API_KEY
+        value: ""

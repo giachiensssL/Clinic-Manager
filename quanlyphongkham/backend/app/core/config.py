@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
-    BACKEND_CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]
+    BACKEND_CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000", "https://clinic-manager-swart.vercel.app", "https://*.vercel.app"]
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
