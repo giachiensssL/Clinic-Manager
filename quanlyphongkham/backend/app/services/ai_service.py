@@ -352,7 +352,7 @@ class AIService:
             )
 
             model = genai.GenerativeModel(
-                model_name="gemini-flash-latest",
+                model_name="gemini-1.5-flash",
                 system_instruction=system_instruction
             )
             response = await asyncio.to_thread(model.generate_content, message)
@@ -374,7 +374,7 @@ class AIService:
             )
 
             model = genai.GenerativeModel(
-                model_name="gemini-flash-latest",
+                model_name="gemini-1.5-flash",
                 system_instruction=system_instruction
             )
 

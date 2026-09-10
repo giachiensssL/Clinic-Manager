@@ -81,8 +81,8 @@ export const prescriptionsAPI = {
 export const billingAPI = {
   getAll: (params?: any) => api.get('/billing', { params }),
   getById: (id: string) => api.get(`/billing/${id}`),
-  create: (data: any) => api.post('/billing', null, { params: data }),
-  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, null, { params: data }),
+  create: (data: any) => api.post('/billing', data),
+  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, data),
 };
 
 export const aiAPI = {
@@ -110,6 +110,7 @@ export const adminAPI = {
   updateGuardrail: (id: string, data: any) => api.put(`/admin/guardrails/${id}`, data),
   createUser: (data: any) => api.post('/admin/users', data),
   updateUserRole: (id: string, role: string) => api.put(`/admin/users/${id}/role`, { role }),
+  toggleUserStatus: (id: string) => api.put(`/admin/users/${id}/status`),
 };
 
 export default api;

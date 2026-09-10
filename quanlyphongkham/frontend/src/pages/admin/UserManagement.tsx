@@ -1,25 +1,15 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Edit2, Lock, Unlock, UserCog } from 'lucide-react';
+import { Search, Plus, Edit2, Lock, Unlock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const mockUsers = [
-  { id: 'u001', username: 'admin', fullName: 'Super Admin', email: 'admin@clinicai.vn', role: 'admin', status: 'active', lastLogin: '09/09/2026 15:42', phone: '0901234567' },
-  { id: 'u002', username: 'doctor1', fullName: 'BS. Trần Thị Hương', email: 'huong.doctor@clinicai.vn', role: 'doctor', status: 'active', lastLogin: '09/09/2026 14:58', phone: '0912345678' },
-  { id: 'u003', username: 'doctor2', fullName: 'BS. Nguyễn Văn Bình', email: 'binh.doctor@clinicai.vn', role: 'doctor', status: 'active', lastLogin: '09/09/2026 13:22', phone: '0923456789' },
-  { id: 'u004', username: 'doctor3', fullName: 'BS. Lê Thị Phương', email: 'phuong.doctor@clinicai.vn', role: 'doctor', status: 'active', lastLogin: '08/09/2026 16:30', phone: '0934567890' },
-  { id: 'u005', username: 'reception1', fullName: 'Lễ tân Trần Thị Ngọc', email: 'ngoc.reception@clinicai.vn', role: 'receptionist', status: 'active', lastLogin: '09/09/2026 08:15', phone: '0945678901' },
-  { id: 'u006', username: 'reception2', fullName: 'Lễ tân Phạm Văn Đức', email: 'duc.reception@clinicai.vn', role: 'receptionist', status: 'inactive', lastLogin: '05/09/2026 17:45', phone: '0956789012' },
-  { id: 'u007', username: 'accountant1', fullName: 'Kế toán Nguyễn Thị Lan', email: 'lan.accountant@clinicai.vn', role: 'accountant', status: 'active', lastLogin: '09/09/2026 09:30', phone: '0967890123' },
-  { id: 'u008', username: 'patient001', fullName: 'Nguyễn Văn Minh', email: 'minh.patient@gmail.com', role: 'patient', status: 'active', lastLogin: '07/09/2026 10:00', phone: '0978901234' },
-  { id: 'u009', username: 'patient002', fullName: 'Trần Thị Lan', email: 'lan.patient@gmail.com', role: 'patient', status: 'active', lastLogin: '06/09/2026 14:22', phone: '0989012345' },
-];
+import { adminAPI } from '@/services/api';
 
 const roleBadge: Record<string, string> = {
   admin: 'bg-red-100 text-red-700',
@@ -37,42 +27,41 @@ const roleLabel: Record<string, string> = {
 };
 
 export default function UserManagement() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [users, setUsers] = useState(mockUsers);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', fullName: '', email: '', role: 'doctor', phone: '' });
 
-  const filtered = users.filter(u => {
-    const matchSearch =
-      u.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.includes(search) ||
-      u.email.includes(search);
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchSearch && matchRole;
+  const { data, isLoading } = useQuery({
+    queryKey: ['users', search, roleFilter],
+    queryFn: async () => {
+      const res = await adminAPI.getUsers({ search, role: roleFilter });
+      return res.data;
+    },
   });
 
-  const toggleStatus = (id: string) => {
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
-      )
-    );
-  };
+  const users: any[] = data?.items ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => adminAPI.createUser(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setIsAddOpen(false);
+      setNewUser({ username: '', fullName: '', email: '', role: 'doctor', phone: '' });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (id: string) => adminAPI.toggleUserStatus(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
 
   const handleAddUser = () => {
     if (!newUser.username || !newUser.fullName) return;
-    setUsers(prev => [
-      ...prev,
-      {
-        id: `u${Date.now()}`,
-        ...newUser,
-        status: 'active',
-        lastLogin: '—',
-      },
-    ]);
-    setNewUser({ username: '', fullName: '', email: '', role: 'doctor', phone: '' });
-    setIsAddOpen(false);
+    createMutation.mutate(newUser);
   };
 
   const roleCounts = {
@@ -113,10 +102,6 @@ export default function UserManagement() {
                 <Input value={newUser.email} onChange={e => setNewUser(p => ({ ...p, email: e.target.value }))} placeholder="email@clinicai.vn" type="email" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Số điện thoại</label>
-                <Input value={newUser.phone} onChange={e => setNewUser(p => ({ ...p, phone: e.target.value }))} placeholder="09xxxxxxxx" />
-              </div>
-              <div className="space-y-1.5">
                 <label className="text-sm font-medium">Vai trò</label>
                 <Select value={newUser.role} onValueChange={v => setNewUser(p => ({ ...p, role: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -131,7 +116,10 @@ export default function UserManagement() {
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <Button variant="outline" onClick={() => setIsAddOpen(false)}>Hủy</Button>
-                <Button className="bg-[#1e3a5f]" onClick={handleAddUser}>Thêm user</Button>
+                <Button className="bg-[#1e3a5f]" onClick={handleAddUser} disabled={createMutation.isPending}>
+                  {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Thêm user
+                </Button>
               </div>
             </div>
           </DialogContent>
@@ -190,54 +178,60 @@ export default function UserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(u => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                          {u.fullName.charAt(0)}
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center h-24">Đang tải...</TableCell></TableRow>
+                ) : users.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center h-24">Không có dữ liệu.</TableCell></TableRow>
+                ) : (
+                  users.map(u => (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
+                            {u.fullName?.charAt(0) || u.username.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{u.fullName}</p>
+                            <p className="text-xs text-slate-400">@{u.username}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{u.fullName}</p>
-                          <p className="text-xs text-slate-400">@{u.username}</p>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">{u.email || '—'}</TableCell>
+                      <TableCell>
+                        <span className={cn('text-xs font-medium px-2 py-1 rounded-full', roleBadge[u.role] || 'bg-slate-100 text-slate-700')}>
+                          {roleLabel[u.role] || u.role}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={u.status === 'active' ? 'default' : 'outline'}
+                          className={u.status === 'active' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'text-slate-500'}>
+                          {u.status === 'active' ? 'Hoạt động' : 'Tạm khóa'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">{u.lastLogin}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" title="Chỉnh sửa">
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleMutation.mutate(u.id)}
+                            disabled={toggleMutation.isPending}
+                            title={u.status === 'active' ? 'Khóa tài khoản' : 'Mở khóa'}
+                            className={u.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}
+                          >
+                            {u.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                          </Button>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600">{u.email || '—'}</TableCell>
-                    <TableCell>
-                      <span className={cn('text-xs font-medium px-2 py-1 rounded-full', roleBadge[u.role])}>
-                        {roleLabel[u.role]}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={u.status === 'active' ? 'default' : 'outline'}
-                        className={u.status === 'active' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'text-slate-500'}>
-                        {u.status === 'active' ? 'Hoạt động' : 'Tạm khóa'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500">{u.lastLogin}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" title="Chỉnh sửa">
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => toggleStatus(u.id)}
-                          title={u.status === 'active' ? 'Khóa tài khoản' : 'Mở khóa'}
-                          className={u.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}
-                        >
-                          {u.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
-          <p className="text-sm text-slate-500 mt-3">Hiển thị {filtered.length} / {users.length} người dùng</p>
         </CardContent>
       </Card>
     </div>

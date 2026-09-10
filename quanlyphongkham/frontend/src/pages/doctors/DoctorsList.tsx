@@ -1,69 +1,202 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Search, Stethoscope, Star, Clock, Calendar, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Calendar, Star, Phone } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { doctorsAPI } from '@/services/api';
+import { Doctor } from '@/types';
 
-const mockDoctors = [
-  { id: 'd001', name: 'BS. Nguyễn Thị Hương', specialty: 'Tim mạch', department: 'Khoa Tim mạch', phone: '0912000001', email: 'huong.nguyen@clinic.vn', fee: 300000, rating: 4.9, patients_today: 8, status: 'active', schedule: 'T2-T6: 07:30-11:30' },
-  { id: 'd002', name: 'BS. Trần Văn Bình', specialty: 'Da liễu', department: 'Khoa Da liễu', phone: '0912000002', email: 'binh.tran@clinic.vn', fee: 250000, rating: 4.7, patients_today: 6, status: 'active', schedule: 'T2-T7: 08:00-12:00' },
-  { id: 'd003', name: 'BS. Lê Thị Phương', specialty: 'Nội khoa', department: 'Khoa Nội tổng hợp', phone: '0912000003', email: 'phuong.le@clinic.vn', fee: 200000, rating: 4.8, patients_today: 10, status: 'active', schedule: 'T2-T6: 07:00-11:00' },
-  { id: 'd004', name: 'BS. Phạm Minh Tuấn', specialty: 'Chỉnh hình', department: 'Khoa Chỉnh hình', phone: '0912000004', email: 'tuan.pham@clinic.vn', fee: 350000, rating: 4.6, patients_today: 5, status: 'active', schedule: 'T3-T7: 08:00-12:00' },
-  { id: 'd005', name: 'BS. Võ Thị Lan', specialty: 'Nhi khoa', department: 'Khoa Nhi', phone: '0912000005', email: 'lan.vo@clinic.vn', fee: 220000, rating: 4.9, patients_today: 12, status: 'active', schedule: 'T2-T6: 07:30-12:00' },
-  { id: 'd006', name: 'BS. Đặng Quốc Huy', specialty: 'Thần kinh', department: 'Khoa Thần kinh', phone: '0912000006', email: 'huy.dang@clinic.vn', fee: 280000, rating: 4.5, patients_today: 0, status: 'off', schedule: 'T2-T5: 08:00-12:00' },
-];
+const DAY_NAMES = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
 
 export default function DoctorsList() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const [scheduleDoctor, setScheduleDoctor] = useState<Doctor | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['doctors'],
+    queryFn: () => doctorsAPI.getAll().then(r => r.data),
+  });
+
+  const doctors: Doctor[] = data?.items ?? data ?? [];
+
+  const filtered = doctors.filter(d => {
+    const name = d.staff?.full_name ?? '';
+    const specialty = d.specialty?.name ?? '';
+    const dept = d.department?.name ?? '';
+    const q = search.toLowerCase();
+    return name.toLowerCase().includes(q) || specialty.toLowerCase().includes(q) || dept.toLowerCase().includes(q);
+  });
+
+  const formatCurrency = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
+
+  const handleBooking = (doctor: Doctor) => {
+    navigate('/appointments', { state: { preselectedDoctorId: doctor.id } });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Danh sách Bác sĩ</h1>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Tìm bác sĩ, chuyên khoa..." className="pl-8 bg-white" />
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Danh sách Bác sĩ</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {filtered.length} bác sĩ đang hoạt động
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockDoctors.map((doc) => (
-          <Card key={doc.id} className="overflow-hidden hover:shadow-md transition-shadow">
-            <CardContent className="p-0">
-              <div className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center font-bold text-xl">
-                      {doc.name.split(' ').pop()?.[0]}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-[#1e3a5f]">{doc.name}</h3>
-                      <p className="text-sm text-[#0ea5e9] font-medium">{doc.specialty}</p>
-                    </div>
-                  </div>
-                  <Badge variant={doc.status === 'active' ? 'completed' : 'cancelled'}>
-                    {doc.status === 'active' ? 'Đang làm việc' : 'Nghỉ'}
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input
+          placeholder="Tìm bác sĩ, chuyên khoa..."
+          className="pl-9"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 animate-pulse h-64" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-500">
+          <Stethoscope className="w-12 h-12 mx-auto mb-4 opacity-30" />
+          <p>Không tìm thấy bác sĩ nào</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filtered.map(doctor => (
+            <div
+              key={doctor.id}
+              className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow"
+            >
+              {/* Avatar */}
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                  <Stethoscope className="w-7 h-7 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-slate-900 dark:text-white truncate">
+                    {doctor.staff?.full_name ?? 'N/A'}
+                  </h3>
+                  <Badge variant="secondary" className="mt-1 text-xs">
+                    {doctor.specialty?.name ?? 'Chưa phân chuyên khoa'}
                   </Badge>
                 </div>
-                
-                <div className="mt-6 space-y-2 text-sm text-slate-600">
-                  <div className="flex justify-between"><span className="flex items-center gap-2"><Star className="w-4 h-4 text-amber-500" /> Đánh giá</span><span className="font-medium text-slate-900">{doc.rating} / 5.0</span></div>
-                  <div className="flex justify-between"><span className="flex items-center gap-2"><Phone className="w-4 h-4" /> SĐT</span><span>{doc.phone}</span></div>
-                  <div className="flex justify-between"><span className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Lịch làm việc</span><span>{doc.schedule}</span></div>
+              </div>
+
+              {/* Info */}
+              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300 mb-4">
+                <div className="flex items-center gap-2">
+                  <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                  <span>{doctor.qualification ?? 'Bác sĩ'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <span>{doctor.department?.name ?? 'Khoa chưa rõ'}</span>
+                </div>
+                {doctor.staff?.phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span>{doctor.staff.phone}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    {formatCurrency(doctor.consultation_fee)} / lần khám
+                  </span>
                 </div>
               </div>
-              <div className="bg-slate-50 p-4 border-t flex items-center justify-between">
-                <div><p className="text-xs text-slate-500">Phí khám</p><p className="font-bold text-[#1e3a5f]">{doc.fee.toLocaleString()}đ</p></div>
-                <div className="space-x-2">
-                  <Button variant="outline" size="sm">Xem lịch</Button>
-                  <Button size="sm" className="bg-[#0ea5e9] hover:bg-[#0284c7]">Đặt lịch</Button>
-                </div>
+
+              {/* Status */}
+              <div className="mb-4">
+                <Badge className={doctor.is_active
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-red-100 text-red-700'
+                }>
+                  {doctor.is_active ? '● Đang làm việc' : '● Nghỉ'}
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setScheduleDoctor(doctor)}
+                >
+                  <Clock className="w-3.5 h-3.5 mr-1.5" />
+                  Xem lịch
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  disabled={!doctor.is_active}
+                  onClick={() => handleBooking(doctor)}
+                >
+                  <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                  Đặt lịch
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Schedule Dialog */}
+      <Dialog open={!!scheduleDoctor} onOpenChange={() => setScheduleDoctor(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Lịch làm việc — {scheduleDoctor?.staff?.full_name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="text-sm text-slate-500 mb-4">
+              <span className="font-medium text-slate-700 dark:text-slate-200">Chuyên khoa:</span>{' '}
+              {scheduleDoctor?.specialty?.name} · {scheduleDoctor?.department?.name}
+            </div>
+            {[0, 1, 2, 3, 4, 5].map(day => (
+              <div
+                key={day}
+                className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0"
+              >
+                <span className="font-medium text-sm text-slate-700 dark:text-slate-200 w-20">
+                  {DAY_NAMES[day]}
+                </span>
+                <span className="text-sm text-green-600 dark:text-green-400">
+                  07:30 – 17:00
+                </span>
+              </div>
+            ))}
+            <p className="text-xs text-slate-400 pt-2">
+              * Lịch cụ thể có thể thay đổi. Vui lòng liên hệ lễ tân để xác nhận.
+            </p>
+          </div>
+          <Button className="w-full mt-2" onClick={() => {
+            setScheduleDoctor(null);
+            if (scheduleDoctor) handleBooking(scheduleDoctor);
+          }}>
+            <Calendar className="w-4 h-4 mr-2" />
+            Đặt lịch với bác sĩ này
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
