@@ -79,19 +79,41 @@ export default function AIAssistant() {
         )
       );
 
+      let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunkStr = decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         
-        // chunkStr can contain multiple chunks if they arrived fast, but for simple Gemini streaming
-        // it just yields text directly. If backend sends raw text, we just append.
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === loadingId ? { ...m, content: m.content + chunkStr } : m
-          )
-        );
+        for (const line of lines) {
+          if (line.trim() === '' || !line.startsWith('data: ')) continue;
+          const dataStr = line.replace('data: ', '').trim();
+          if (dataStr === '[DONE]') break;
+          
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.type === 'start') {
+               setConversationId(data.conversation_id);
+            } else if (data.type === 'chunk') {
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === loadingId ? { ...m, content: m.content + data.content } : m
+                )
+              );
+            } else if (data.type === 'guardrail') {
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === loadingId ? { ...m, content: data.content, isGuardrail: true } : m
+                )
+              );
+            }
+          } catch (e) {
+            console.error("Error parsing SSE JSON", e, dataStr);
+          }
+        }
       }
       
     } catch (err: any) {

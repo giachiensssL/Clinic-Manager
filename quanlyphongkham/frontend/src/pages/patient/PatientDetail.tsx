@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, User, Calendar, FileText, Pill, CreditCard, Edit, AlertTriangle, Loader2 } from 'lucide-react';
-import { patientsAPI } from '@/services/api';
+import { patientsAPI, emrAPI, prescriptionsAPI, billingAPI } from '@/services/api';
 
 export default function PatientDetail() {
   const { id } = useParams();
@@ -16,6 +16,33 @@ export default function PatientDetail() {
     queryFn: async () => {
       if (!id) return null;
       const res = await patientsAPI.getById(id);
+      return res.data;
+    },
+    enabled: !!id
+  });
+
+  const { data: emrData } = useQuery({
+    queryKey: ['patient-emr', id],
+    queryFn: async () => {
+      const res = await emrAPI.getByPatient(id!);
+      return res.data;
+    },
+    enabled: !!id
+  });
+
+  const { data: prescriptionsData } = useQuery({
+    queryKey: ['patient-prescriptions', id],
+    queryFn: async () => {
+      const res = await prescriptionsAPI.getAll({ patient_id: id });
+      return res.data;
+    },
+    enabled: !!id
+  });
+
+  const { data: billingData } = useQuery({
+    queryKey: ['patient-billing', id],
+    queryFn: async () => {
+      const res = await billingAPI.getAll({ patient_id: id });
       return res.data;
     },
     enabled: !!id
@@ -108,13 +135,75 @@ export default function PatientDetail() {
           </Card>
         </TabsContent>
         <TabsContent value="emr" className="mt-6">
-          <Card><CardContent className="p-6 flex items-center justify-center text-muted-foreground h-40">Tính năng EMR đang được hoàn thiện</CardContent></Card>
+          <Card>
+            <CardContent className="p-6">
+              {emrData?.items?.length > 0 ? (
+                <div className="space-y-4">
+                  {emrData.items.map((emr: any) => (
+                    <div key={emr.id} className="p-4 border rounded-lg hover:bg-slate-50 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-[#1e3a5f]">Ngày khám: {new Date(emr.created_at).toLocaleDateString('vi-VN')}</div>
+                        <div className="text-sm text-slate-500 mt-1">Lý do: {emr.chief_complaint || 'Không có'}</div>
+                      </div>
+                      <Badge variant={emr.status === 'locked' ? 'completed' : 'outline' as any}>
+                        {emr.status === 'locked' ? 'Đã khóa' : 'Nháp'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center text-muted-foreground h-40">Chưa có hồ sơ bệnh án</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="prescriptions" className="mt-6">
-          <Card><CardContent className="p-6 flex items-center justify-center text-muted-foreground h-40">Tính năng Đơn thuốc đang được hoàn thiện</CardContent></Card>
+          <Card>
+            <CardContent className="p-6">
+              {prescriptionsData?.items?.length > 0 ? (
+                <div className="space-y-4">
+                  {prescriptionsData.items.map((rx: any) => (
+                    <div key={rx.id} className="p-4 border rounded-lg hover:bg-slate-50 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-[#1e3a5f]">Mã đơn: {rx.prescription_code}</div>
+                        <div className="text-sm text-slate-500 mt-1">Bác sĩ: {rx.doctor_name} • Ngày: {new Date(rx.created_at).toLocaleDateString('vi-VN')}</div>
+                        <div className="text-sm text-slate-500">Số lượng loại thuốc: {rx.items_count}</div>
+                      </div>
+                      <Badge variant={rx.status === 'dispensed' ? 'completed' : 'outline' as any}>
+                        {rx.status === 'dispensed' ? 'Đã phát' : 'Chờ phát'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center text-muted-foreground h-40">Chưa có đơn thuốc</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="billing" className="mt-6">
-          <Card><CardContent className="p-6 flex items-center justify-center text-muted-foreground h-40">Tính năng Hóa đơn đang được hoàn thiện</CardContent></Card>
+          <Card>
+            <CardContent className="p-6">
+              {billingData?.items?.length > 0 ? (
+                <div className="space-y-4">
+                  {billingData.items.map((b: any) => (
+                    <div key={b.id} className="p-4 border rounded-lg hover:bg-slate-50 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-[#1e3a5f]">Hóa đơn: {b.invoice_code}</div>
+                        <div className="text-sm text-slate-500 mt-1">Tổng tiền: {b.total_amount.toLocaleString()} VND</div>
+                        <div className="text-sm text-slate-500">Còn nợ: {b.remaining_amount.toLocaleString()} VND</div>
+                      </div>
+                      <Badge className={b.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}>
+                        {b.status === 'paid' ? 'Đã thanh toán' : b.status === 'partially_paid' ? 'Thanh toán 1 phần' : 'Chưa thanh toán'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center text-muted-foreground h-40">Chưa có hóa đơn</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -25,6 +25,44 @@ def _generate_prescription_code() -> str:
     import random
     return f"DT{random.randint(100000, 999999)}"
 
+@router.get("", summary="Danh sach don thuoc")
+async def list_prescriptions(
+    patient_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    query = select(Prescription).options(
+        selectinload(Prescription.patient),
+        selectinload(Prescription.doctor).selectinload(User.staff),
+        selectinload(Prescription.items).selectinload(PrescriptionItem.medicine)
+    ).order_by(Prescription.created_at.desc())
+    
+    if current_user.role == UserRole.PATIENT:
+        from app.models.models import Patient
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if not pid:
+            return {"items": [], "total": 0}
+        query = query.where(Prescription.patient_id == pid)
+    elif patient_id:
+        query = query.where(Prescription.patient_id == patient_id)
+        
+    result = await db.execute(query)
+    items = result.scalars().all()
+    
+    response = []
+    for rx in items:
+        response.append({
+            "id": rx.id,
+            "prescription_code": rx.prescription_code,
+            "patient_name": rx.patient.full_name if rx.patient else "N/A",
+            "doctor_name": rx.doctor.staff.full_name if (rx.doctor and rx.doctor.staff) else "N/A",
+            "created_at": rx.created_at.isoformat(),
+            "status": "dispensed" if rx.dispensed_at else "pending",
+            "items_count": len(rx.items)
+        })
+    return {"items": response, "total": len(response)}
+
 
 @router.post("", summary="Tao don thuoc moi", status_code=201)
 async def create_prescription(

@@ -4,7 +4,8 @@ from sqlalchemy import select, func
 from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
-from app.core.security import get_current_user, get_password_hash
+from app.core.deps import get_current_user
+from app.core.security import hash_password as get_password_hash
 from app.models.models import User, UserRole, Staff, Patient
 
 router = APIRouter()

@@ -131,6 +131,66 @@ async def get_consultation(
     }
 
 
+@router.get("/appointment/{appointment_id}", summary="Xem ho so benh an theo lich hen")
+async def get_consultation_by_appointment(
+    appointment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Lay thong tin day du cua ho so benh an thong qua appointment_id"""
+    result = await db.execute(
+        select(Consultation)
+        .options(
+            selectinload(Consultation.diagnoses).selectinload(ConsultationDiagnosis.diagnosis),
+            selectinload(Consultation.prescription),
+        )
+        .where(Consultation.appointment_id == appointment_id)
+    )
+    c = result.scalar_one_or_none()
+    if not c:
+        raise HTTPException(status_code=404, detail="Khong tim thay ho so benh an cho lich hen nay")
+
+    return await get_consultation(c.id, db, current_user)
+
+
+@router.get("/patient/{patient_id}", summary="Xem danh sach ho so theo benh nhan")
+async def list_consultations_by_patient(
+    patient_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Lay danh sach ho so benh an cua mot benh nhan"""
+    from app.models.models import Patient, UserRole
+    
+    if current_user.role == UserRole.PATIENT:
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if not pid or pid != patient_id:
+            raise HTTPException(status_code=403, detail="Khong co quyen truy cap")
+            
+    result = await db.execute(
+        select(Consultation)
+        .options(
+            selectinload(Consultation.diagnoses).selectinload(ConsultationDiagnosis.diagnosis),
+            selectinload(Consultation.doctor).selectinload(User.staff) # Or Doctor model
+        )
+        .where(Consultation.patient_id == patient_id)
+        .order_by(Consultation.created_at.desc())
+    )
+    items = result.scalars().all()
+    
+    response = []
+    for c in items:
+        response.append({
+            "id": c.id,
+            "appointment_id": c.appointment_id,
+            "status": c.status.value,
+            "chief_complaint": c.chief_complaint,
+            "created_at": c.created_at.isoformat(),
+        })
+
+    return {"items": response}
+
 @router.put("/{consultation_id}", summary="Cap nhat ho so benh an")
 async def update_consultation(
     consultation_id: str,

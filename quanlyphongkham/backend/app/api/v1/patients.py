@@ -99,6 +99,28 @@ async def create_patient(
     return PatientResponse.model_validate(patient)
 
 
+@router.get("/me", response_model=PatientDetail)
+async def get_my_patient_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Bệnh nhân lấy hồ sơ của chính mình"""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Chỉ bệnh nhân mới có hồ sơ")
+        
+    result = await db.execute(
+        select(Patient)
+        .options(selectinload(Patient.appointments).selectinload(Appointment.doctor))
+        .where(Patient.user_id == current_user.id, Patient.deleted_at.is_(None))
+    )
+    patient = result.scalar_one_or_none()
+    
+    if not patient:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ bệnh nhân của bạn")
+        
+    return PatientDetail.model_validate(patient)
+
+
 @router.get("/{patient_id}", response_model=PatientDetail)
 async def get_patient(
     patient_id: str,

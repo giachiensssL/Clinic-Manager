@@ -25,6 +25,42 @@ def _generate_invoice_code() -> str:
     import random
     return f"HD{random.randint(100000, 999999)}"
 
+@router.get("", summary="Danh sach hoa don")
+async def list_billings(
+    patient_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.models.models import Patient, UserRole
+    query = select(Billing).options(
+        selectinload(Billing.patient)
+    ).order_by(Billing.created_at.desc())
+    
+    if current_user.role == UserRole.PATIENT:
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if not pid:
+            return {"items": [], "total": 0}
+        query = query.where(Billing.patient_id == pid)
+    elif patient_id:
+        query = query.where(Billing.patient_id == patient_id)
+        
+    result = await db.execute(query)
+    items = result.scalars().all()
+    
+    response = []
+    for b in items:
+        response.append({
+            "id": b.id,
+            "invoice_code": b.invoice_code,
+            "patient_name": b.patient.full_name if b.patient else "N/A",
+            "total_amount": b.total_amount,
+            "remaining_amount": b.remaining_amount,
+            "status": b.status.value,
+            "created_at": b.created_at.isoformat()
+        })
+    return {"items": response, "total": len(response)}
+
 
 @router.post("", summary="Tao hoa don moi", status_code=201)
 async def create_billing(

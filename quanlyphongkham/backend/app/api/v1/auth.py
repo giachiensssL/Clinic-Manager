@@ -12,6 +12,8 @@ from app.services.audit_service import log_action
 
 router = APIRouter()
 
+import asyncio
+
 @router.post("/login", response_model=Token)
 async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     # Find user by email or username
@@ -23,10 +25,15 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
     )
     user = result.scalar_one_or_none()
     
-    if not user or not verify_password(payload.password, user.hashed_password):
+    is_valid_pwd = False
+    if user:
+        is_valid_pwd = await asyncio.to_thread(verify_password, payload.password, user.hashed_password)
+        
+    if not user or not is_valid_pwd:
         await log_action(db, None, AuditAction.LOGIN, "auth", None,
                         f"Failed login attempt: {payload.username}", 
                         request.client.host if request.client else None, result="failed")
+        await db.commit()
         raise HTTPException(status_code=401, detail="Sai tên đăng nhập hoặc mật khẩu")
     
     if not user.is_active:
@@ -45,6 +52,8 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
     
     await log_action(db, user, AuditAction.LOGIN, "auth", user.id,
                     f"Successful login", request.client.host if request.client else None)
+    
+    await db.commit()
     
     return Token(
         access_token=access_token,

@@ -229,7 +229,7 @@ class AIService:
         conversation_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming chat response"""
-        # Guardrail check first
+        # 1. Guardrail check first
         input_guard = InputGuardrail(await load_guardrail_rules(db))
         result = input_guard.check(message)
 
@@ -242,21 +242,53 @@ class AIService:
 
         masked = mask_pii(message)
 
+        # 2. Get or create conversation
+        if not conversation_id:
+            conversation = AIConversation(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                title=message[:50] + "..." if len(message) > 50 else message,
+            )
+            db.add(conversation)
+            await db.flush()
+            conversation_id = conversation.id
+
         yield f"data: {json.dumps({'type': 'start', 'conversation_id': conversation_id})}\n\n"
 
+        # 3. Stream AI response
         full_response = []
         if self.is_mock:
             async for chunk in mock_streaming_response(masked):
                 full_response.append(chunk)
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
         else:
-            async for chunk in self._stream_real_llm(masked):
-                full_response.append(chunk)
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            if settings.LLM_PROVIDER == "gemini":
+                async for chunk in self._stream_gemini(db, user, masked, conversation_id):
+                    full_response.append(chunk)
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'chunk', 'content': 'Tính năng AI thật chỉ hỗ trợ Gemini trong bản này.'})}\n\n"
+                full_response.append("Tính năng AI thật chỉ hỗ trợ Gemini trong bản này.")
 
         response_text = "".join(full_response)
 
-        # Output guardrail
+        # 4. Save messages to DB
+        user_msg = AIMessage(
+            id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            role="user",
+            content=message,
+        )
+        ai_msg = AIMessage(
+            id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            role="assistant",
+            content=response_text,
+        )
+        db.add_all([user_msg, ai_msg])
+        await db.commit()
+
+        # 5. Output guardrail
         out_result = OutputGuardrail().check(response_text)
         if out_result.is_blocked:
             yield f"data: {json.dumps({'type': 'guardrail', 'content': SCOPE_EXCEEDED_RESPONSE, 'blocked': True})}\n\n"
@@ -265,68 +297,120 @@ class AIService:
 
         yield "data: [DONE]\n\n"
 
-    async def summarize_emr(
-        self,
-        db: AsyncSession,
-        user: User,
-        patient_id: str,
-        consultations: list,
-    ) -> dict:
-        """
-        AI tóm tắt lịch sử EMR — Doctor only
-        AI CHỈ summarize dữ liệu đã có, KHÔNG suy luận, KHÔNG chẩn đoán
-        PII được mask trước khi gửi AI
-        """
-        if self.is_mock:
-            summary = MOCK_EMR_SUMMARY.format(
-                time=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    async def _stream_gemini(self, db: AsyncSession, user: User, message: str, conversation_id: str) -> AsyncGenerator[str, None]:
+        """Stream từ Gemini với tính năng Memory và Tool Calling (Agentic)"""
+        try:
+            import google.generativeai as genai
+            from google.generativeai.types import content_types
+            from sqlalchemy import select
+            
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            
+            from app.ai.tools.appointment_tools import check_availability, book_appointment
+            
+            # Khai báo schema tools cho Gemini
+            tools = [
+                {
+                    "function_declarations": [
+                        {
+                            "name": "check_availability",
+                            "description": "Kiểm tra danh sách bác sĩ có lịch trống trong một ngày cụ thể.",
+                            "parameters": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "appointment_date": {"type": "STRING", "description": "Ngày cần kiểm tra định dạng YYYY-MM-DD"},
+                                    "specialty_name": {"type": "STRING", "description": "Tên chuyên khoa (vd: 'Nội khoa', 'Nha khoa'). Có thể bỏ trống nếu không rõ."}
+                                },
+                                "required": ["appointment_date"]
+                            }
+                        },
+                        {
+                            "name": "book_appointment",
+                            "description": "Trực tiếp đặt lịch khám mới cho người dùng. CHỈ GỌI khi người dùng đã chốt bác sĩ, ngày và giờ.",
+                            "parameters": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "doctor_id": {"type": "STRING", "description": "ID của bác sĩ"},
+                                    "date_str": {"type": "STRING", "description": "Ngày khám YYYY-MM-DD"},
+                                    "time_str": {"type": "STRING", "description": "Giờ khám HH:MM"},
+                                    "reason": {"type": "STRING", "description": "Lý do khám bệnh"}
+                                },
+                                "required": ["doctor_id", "date_str", "time_str", "reason"]
+                            }
+                        }
+                    ]
+                }
+            ]
+
+            system_instruction = (
+                "Bạn là trợ lý AI thông minh của Phòng khám Clinic AI.\n"
+                "Bạn có quyền tự động dùng công cụ check_availability để tra cứu lịch, "
+                "và book_appointment để đặt lịch ngay lập tức khi user yêu cầu.\n"
+                "Khi đặt lịch xong, trả về thông báo kèm mã lịch hẹn cho user.\n"
+                "LUÔN HỎI LẠI TRƯỚC KHI ĐẶT LỊCH nếu thiếu giờ, bác sĩ hoặc lý do khám.\n"
+                "Bạn CÓ THỂ trò chuyện, giao tiếp cơ bản (small talk) và hỏi han thân thiện với người dùng.\n"
+                "TUYỆT ĐỐI KHÔNG chẩn đoán bệnh. Luôn trả lời thân thiện bằng tiếng Việt."
             )
-        else:
-            # Build context from consultations (with PII masking)
-            context = self._build_masked_emr_context(consultations)
-            summary = await self._call_emr_summary_llm(context)
 
-        await log_action(db, user, AuditAction.AI_REQUEST, "emr_summary", patient_id,
-                        "EMR summary generated")
-
-        return {
-            "summary": summary,
-            "patient_id": patient_id,
-            "source_records": len(consultations),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "model": "mock" if self.is_mock else settings.LLM_PROVIDER,
-            "disclaimer": "Đây là bản tóm tắt từ dữ liệu có sẵn. AI không đưa ra chẩn đoán. "
-                         "Mọi quyết định lâm sàng phải do bác sĩ thực hiện.",
-        }
-
-    def _build_masked_emr_context(self, consultations: list) -> str:
-        """Build EMR context với PII masking"""
-        parts = []
-        for i, c in enumerate(consultations):
-            parts.append(
-                f"Lần khám {i+1}:\n"
-                f"- Ngày: {getattr(c, 'created_at', 'N/A')}\n"
-                f"- Ghi chú lâm sàng: {getattr(c, 'clinical_notes', 'N/A')}\n"
-                f"- Chẩn đoán: {', '.join([cd.diagnosis.name for cd in getattr(c, 'diagnoses', [])])}\n"
+            model = genai.GenerativeModel(
+                model_name="gemini-3.6-flash",
+                system_instruction=system_instruction,
+                tools=tools
             )
-        return "\n".join(parts)
 
-    async def _call_real_llm(self, message: str, conversation_id: str) -> str:
-        """Gọi LLM thật — được cấu hình theo provider"""
-        # Abstraction layer để dễ thay đổi provider
-        if settings.LLM_PROVIDER == "openai":
-            return await self._call_openai(message)
-        elif settings.LLM_PROVIDER == "gemini":
-            return await self._call_gemini(message)
-        elif settings.LLM_PROVIDER == "claude":
-            return await self._call_claude(message)
-        else:
-            return "AI service hiện không khả dụng. Vui lòng thử lại sau."
+            # Tải lịch sử trò chuyện
+            stmt = select(AIMessage).where(AIMessage.conversation_id == conversation_id).order_by(AIMessage.created_at.asc())
+            result = await db.execute(stmt)
+            history_msgs = result.scalars().all()
+            
+            gemini_history = []
+            for msg in history_msgs:
+                role = "user" if msg.role == "user" else "model"
+                gemini_history.append({"role": role, "parts": [msg.content]})
+                
+            chat = model.start_chat(history=gemini_history)
+            
+            # Gửi tin nhắn đầu tiên
+            response = await chat.send_message_async(message)
+            
+            # Vòng lặp xử lý Function Calling
+            while True:
+                func_calls = [part.function_call for part in response.parts if part.function_call]
+                if not func_calls:
+                    break
+                    
+                fc = func_calls[0]
+                func_name = fc.name
+                args = {k: v for k, v in fc.args.items()}
+                
+                tool_result = ""
+                if func_name == "check_availability":
+                    yield f"\\n*(AI đang tra cứu lịch trống ngày {args.get('appointment_date')}...)*\\n\\n"
+                    tool_result = await check_availability(db, args.get("appointment_date", ""), args.get("specialty_name"))
+                elif func_name == "book_appointment":
+                    yield f"\\n*(AI đang tiến hành đặt lịch với bác sĩ {args.get('doctor_id')}...)*\\n\\n"
+                    tool_result = await book_appointment(db, user.id, args.get("doctor_id", ""), args.get("date_str", ""), args.get("time_str", ""), args.get("reason", ""))
+                
+                # Trả kết quả tool về cho LLM
+                response = await chat.send_message_async(
+                    content_types.Part.from_function_response(
+                        name=func_name,
+                        response={"result": tool_result}
+                    )
+                )
 
-    async def _stream_real_llm(self, message: str) -> AsyncGenerator[str, None]:
-        """Stream từ LLM thật"""
-        # Placeholder — implement khi có API key
-        yield "Tính năng AI thật sẽ khả dụng khi cấu hình API key."
+            # LLM đã có text response cuối cùng
+            # Stream text cuối cùng ra nhanh hơn
+            words = response.text.split(" ")
+            chunk_size = 5
+            for i in range(0, len(words), chunk_size):
+                chunk_words = words[i:i+chunk_size]
+                if chunk_words:
+                    yield " ".join(chunk_words) + (" " if i + chunk_size < len(words) else "")
+                    await asyncio.sleep(0.01)
+                    
+        except Exception as e:
+            yield f"Xin lỗi, hệ thống AI gặp lỗi khi xử lý: {str(e)}"
 
     async def _call_gemini(self, message: str) -> str:
         """Gọi Gemini AI với system prompt hành chính phòng khám"""
@@ -352,43 +436,13 @@ class AIService:
             )
 
             model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
+                model_name="gemini-3.6-flash",
                 system_instruction=system_instruction
             )
             response = await asyncio.to_thread(model.generate_content, message)
             return response.text
         except Exception as e:
             return f"Xin lỗi, hệ thống AI tạm thời không khả dụng. Vui lòng liên hệ lễ tân để được hỗ trợ trực tiếp."
-
-    async def _stream_real_llm(self, message: str) -> AsyncGenerator[str, None]:
-        """Stream từ Gemini thật — chunk by chunk"""
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-
-            system_instruction = (
-                "Bạn là trợ lý AI hành chính của Phòng khám Clinic AI. "
-                "Bạn CHỈ được hỗ trợ: đặt lịch, giờ làm việc, quy trình khám, thủ tục hành chính. "
-                "TUYỆT ĐỐI KHÔNG chẩn đoán bệnh, kê thuốc, hay tư vấn điều trị y tế. "
-                "Trả lời bằng tiếng Việt, thân thiện và chuyên nghiệp."
-            )
-
-            model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=system_instruction
-            )
-
-            # Khong dung list() de tranh block toan bo
-            response = await asyncio.to_thread(
-                model.generate_content, message, stream=True
-            )
-
-            for chunk in response:
-                if hasattr(chunk, 'text') and chunk.text:
-                    yield chunk.text
-                    await asyncio.sleep(0.01)
-        except Exception as e:
-            yield "Xin lỗi, hệ thống AI tạm thời không khả dụng. Vui lòng liên hệ lễ tân để được hỗ trợ trực tiếp."
 
     async def _call_openai(self, message: str) -> str:
         try:

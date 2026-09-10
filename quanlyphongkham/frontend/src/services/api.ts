@@ -45,8 +45,9 @@ export const authAPI = {
 };
 
 export const patientsAPI = {
-  getAll: (params: any) => api.get('/patients', { params }),
+  getAll: (params?: any) => api.get('/patients', { params }),
   getById: (id: string) => api.get(`/patients/${id}`),
+  getMe: () => api.get('/patients/me'),
   create: (data: any) => api.post('/patients', data),
   update: (id: string, data: any) => api.put(`/patients/${id}`, data),
   delete: (id: string) => api.delete(`/patients/${id}`),
@@ -65,6 +66,7 @@ export const doctorsAPI = {
 
 export const emrAPI = {
   getConsultation: (id: string) => api.get(`/emr/${id}`),
+  getByAppointment: (appointmentId: string) => api.get(`/emr/appointment/${appointmentId}`),
   createConsultation: (data: any) => api.post('/emr', null, { params: data }),
   updateConsultation: (id: string, data: any) => api.put(`/emr/${id}`, null, { params: data }),
   signAndLock: (id: string) => api.post(`/emr/${id}/sign`),
@@ -76,13 +78,14 @@ export const prescriptionsAPI = {
   getById: (id: string) => api.get(`/prescriptions/${id}`),
   create: (data: any) => api.post('/prescriptions', null, { params: data }),
   addItem: (id: string, data: any) => api.post(`/prescriptions/${id}/items`, null, { params: data }),
+  dispense: (id: string) => api.post(`/prescriptions/${id}/dispense`),
 };
 
 export const billingAPI = {
   getAll: (params?: any) => api.get('/billing', { params }),
   getById: (id: string) => api.get(`/billing/${id}`),
-  create: (data: any) => api.post('/billing', data),
-  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, data),
+  create: (data: any) => api.post('/billing', null, { params: data }),
+  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, null, { params: data }),
 };
 
 export const aiAPI = {

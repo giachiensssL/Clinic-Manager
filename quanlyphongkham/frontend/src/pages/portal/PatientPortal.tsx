@@ -2,29 +2,57 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
-import { Calendar, FileText, Pill, LogOut, Bot, MessageCircle, Bell, CheckCircle2, Clock } from 'lucide-react';
+import { Calendar, FileText, Pill, LogOut, Bot, MessageCircle, Bell, CheckCircle2, Clock, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const upcomingAppointments = [
-  { id: 'a1', doctor: 'BS. Trần Thị Hương', specialty: 'Tim mạch', date: '10/09/2026', time: '09:30 AM', status: 'confirmed' },
-  { id: 'a2', doctor: 'BS. Nguyễn Văn Bình', specialty: 'Nội khoa', date: '18/09/2026', time: '08:00 AM', status: 'pending' },
-];
-
-const recentHistory = [
-  { id: 'h1', date: '25/08/2026', doctor: 'BS. Trần Thị Hương', specialty: 'Tim mạch', diagnosis: 'Tăng huyết áp nguyên phát (I10)', status: 'completed' },
-  { id: 'h2', date: '10/07/2026', doctor: 'BS. Lê Thị Phương', specialty: 'Nội khoa', diagnosis: 'Viêm họng cấp', status: 'completed' },
-  { id: 'h3', date: '15/05/2026', doctor: 'BS. Nguyễn Văn Bình', specialty: 'Nội khoa', diagnosis: 'Khám sức khỏe tổng quát', status: 'completed' },
-];
-
-const currentPrescriptions = [
-  { name: 'Amlodipine 5mg', usage: '1 viên/ngày', morning: true, duration: 'Dùng dài hạn', remain: '30 ngày còn lại' },
-  { name: 'Losartan 50mg', usage: '1 viên/ngày', morning: false, duration: 'Dùng dài hạn', remain: '30 ngày còn lại' },
-];
+import { useQuery } from '@tanstack/react-query';
+import { patientsAPI, appointmentsAPI, emrAPI, prescriptionsAPI } from '@/services/api';
 
 export default function PatientPortal() {
   const user = useAuthStore(state => state.user);
   const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
+
+  const { data: patientProfile, isLoading: isProfileLoading } = useQuery({
+    queryKey: ['patient-me'],
+    queryFn: async () => {
+      const res = await patientsAPI.getMe();
+      return res.data;
+    }
+  });
+
+  const patientId = patientProfile?.id;
+
+  const { data: aptsRes } = useQuery({
+    queryKey: ['my-appointments'],
+    queryFn: async () => {
+      const res = await appointmentsAPI.getAll({});
+      return res.data;
+    }
+  });
+
+  const { data: emrRes } = useQuery({
+    queryKey: ['my-emr', patientId],
+    queryFn: async () => {
+      const res = await emrAPI.getByPatient(patientId!);
+      return res.data;
+    },
+    enabled: !!patientId
+  });
+
+  const { data: rxRes } = useQuery({
+    queryKey: ['my-prescriptions', patientId],
+    queryFn: async () => {
+      const res = await prescriptionsAPI.getAll({ patient_id: patientId });
+      return res.data;
+    },
+    enabled: !!patientId
+  });
+
+  if (isProfileLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+
+  const upcomingAppointments = aptsRes?.items?.filter((a: any) => a.status === 'scheduled' || a.status === 'waiting') || [];
+  const recentHistory = emrRes?.items?.slice(0, 3) || [];
+  const currentPrescriptions = rxRes?.items?.slice(0, 2) || [];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -96,30 +124,26 @@ export default function PatientPortal() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {upcomingAppointments.map(apt => (
+          {upcomingAppointments.map((apt: any) => (
             <div
               key={apt.id}
-              className={`p-4 border rounded-lg flex justify-between items-center ${
-                apt.status === 'confirmed' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'
-              }`}
+              className={`p-4 border rounded-lg flex justify-between items-center bg-blue-50 border-blue-100`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  apt.status === 'confirmed' ? 'bg-[#0ea5e9]/20 text-[#0ea5e9]' : 'bg-amber-200 text-amber-700'
-                }`}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-[#0ea5e9]/20 text-[#0ea5e9]">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-bold text-[#1e3a5f]">{apt.specialty} — {apt.doctor}</p>
+                  <p className="font-bold text-[#1e3a5f]">{apt.reason || 'Khám bệnh'} — {apt.doctor?.full_name}</p>
                   <p className="text-slate-600 text-sm mt-0.5">
                     <Clock className="w-3.5 h-3.5 inline mr-1" />
-                    {apt.date} • {apt.time}
+                    {apt.appointment_date} • {apt.start_time}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={apt.status === 'confirmed' ? 'bg-[#0ea5e9]' : 'bg-amber-500'}>
-                  {apt.status === 'confirmed' ? 'Đã xác nhận' : 'Chờ xác nhận'}
+                <Badge className={apt.status === 'scheduled' ? 'bg-[#0ea5e9]' : 'bg-amber-500'}>
+                  {apt.status === 'scheduled' ? 'Đã xác nhận' : 'Chờ xác nhận'}
                 </Badge>
                 <Button variant="outline" size="sm" className="text-red-500 border-red-200 hover:bg-red-50">Hủy</Button>
               </div>
@@ -142,18 +166,18 @@ export default function PatientPortal() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentHistory.map(h => (
+            {recentHistory.map((h: any) => (
               <div key={h.id} className="p-3 border rounded-lg hover:bg-slate-50">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-medium text-sm text-[#1e3a5f]">{h.specialty} — {h.doctor}</p>
-                    <p className="text-xs text-slate-500 mt-1">{h.date}</p>
-                    <p className="text-xs text-slate-600 mt-1 bg-slate-100 px-2 py-0.5 rounded inline-block">{h.diagnosis}</p>
+                    <p className="font-medium text-sm text-[#1e3a5f]">Ngày khám: {new Date(h.created_at).toLocaleDateString('vi-VN')}</p>
+                    <p className="text-xs text-slate-500 mt-1">Triệu chứng: {h.chief_complaint || 'Không có'}</p>
                   </div>
-                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">Hoàn thành</Badge>
+                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">{h.status === 'locked' ? 'Hoàn thành' : 'Đang xử lý'}</Badge>
                 </div>
               </div>
             ))}
+            {recentHistory.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Chưa có lịch sử khám</p>}
           </CardContent>
         </Card>
 
@@ -162,25 +186,28 @@ export default function PatientPortal() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Pill className="w-5 h-5 text-teal-500" />
-              Đơn Thuốc Hiện Tại
+              Đơn Thuốc Mới Nhất
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {currentPrescriptions.map((rx, i) => (
-              <div key={i} className="p-3 border border-teal-100 rounded-lg bg-teal-50/40">
+            {currentPrescriptions.map((rx: any, i: number) => (
+              <div key={rx.id} className="p-3 border border-teal-100 rounded-lg bg-teal-50/40">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-bold text-sm text-teal-900">{rx.name}</p>
-                    <p className="text-xs text-teal-700 mt-1">{rx.usage} • {rx.morning ? '☀️ Buổi sáng' : '🌙 Buổi tối'}</p>
-                    <p className="text-xs text-slate-500 mt-1">{rx.duration}</p>
+                    <p className="font-bold text-sm text-teal-900">Mã đơn: {rx.prescription_code}</p>
+                    <p className="text-xs text-teal-700 mt-1">Bác sĩ: {rx.doctor_name}</p>
+                    <p className="text-xs text-slate-500 mt-1">Số lượng loại thuốc: {rx.items_count}</p>
                   </div>
-                  <span className="text-xs text-teal-600 bg-teal-100 px-2 py-1 rounded-full">{rx.remain}</span>
+                  <span className="text-xs text-teal-600 bg-teal-100 px-2 py-1 rounded-full">{rx.status === 'dispensed' ? 'Đã lấy thuốc' : 'Chờ lấy'}</span>
                 </div>
               </div>
             ))}
-            <Button variant="outline" className="w-full mt-2 border-teal-200 text-teal-700">
-              <Pill className="w-4 h-4 mr-2" /> Xem tất cả đơn thuốc
-            </Button>
+            {currentPrescriptions.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Chưa có đơn thuốc nào</p>}
+            {currentPrescriptions.length > 0 && (
+              <Button variant="outline" className="w-full mt-2 border-teal-200 text-teal-700">
+                <Pill className="w-4 h-4 mr-2" /> Xem tất cả đơn thuốc
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
