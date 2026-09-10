@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "quanlyphongkham/frontend/dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "rootDirectory": "quanlyphongkham/frontend",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
