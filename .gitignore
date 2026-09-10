@@ -1,0 +1,30 @@
+# Môi trường và cấu hình
+.env
+*.log
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# IDE và OS
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db

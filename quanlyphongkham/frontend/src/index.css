@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-border: hsl(214 32% 91%);
+  --color-input: hsl(214 32% 91%);
+  --color-ring: hsl(210 79% 25%);
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(215 25% 15%);
+  --color-primary: hsl(210 79% 25%);
+  --color-primary-foreground: hsl(0 0% 98%);
+  --color-secondary: hsl(199 89% 48%);
+  --color-secondary-foreground: hsl(0 0% 98%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-muted: hsl(210 20% 96%);
+  --color-muted-foreground: hsl(215 15% 47%);
+  --color-accent: hsl(210 20% 93%);
+  --color-accent-foreground: hsl(215 25% 15%);
+
+  --color-medical-blue: #1e3a5f;
+  --color-medical-cyan: #0ea5e9;
+  --color-medical-teal: #0d9488;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar for healthcare look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background-color: var(--color-muted);
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-muted-foreground);
+}
+
+/* AI typing animation */
+.ai-typing-dot {
+  @apply w-2 h-2 bg-violet-500 rounded-full animate-bounce;
+}
+.ai-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.ai-typing-dot:nth-child(3) { animation-delay: 0.3s; }

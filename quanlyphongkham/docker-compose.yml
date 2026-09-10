@@ -1,0 +1,84 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: clinic_postgres
+    environment:
+      POSTGRES_DB: clinic_db
+      POSTGRES_USER: clinic_user
+      POSTGRES_PASSWORD: clinic_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic_user -d clinic_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinic_network
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: clinic_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - clinic_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinic_backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://clinic_user:clinic_password@postgres:5432/clinic_db
+      QDRANT_URL: http://qdrant:6333
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    networks:
+      - clinic_network
+    command: >
+      sh -c "alembic upgrade head &&
+             python seed.py &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clinic_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - clinic_network
+
+volumes:
+  postgres_data:
+  qdrant_data:
+
+networks:
+  clinic_network:
+    driver: bridge
