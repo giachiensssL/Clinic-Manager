@@ -50,9 +50,21 @@ AsyncSessionLocal = async_sessionmaker(
 async def init_db():
     """Create all tables on startup if not exists"""
     async with engine.begin() as conn:
-        # Tables are managed by Alembic in production
-        # But this ensures tables exist for development
-        pass
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # Check if admin exists, if not run seed
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+        from app.models.models import User
+        result = await session.execute(select(User).where(User.username == "admin"))
+        admin = result.scalar_one_or_none()
+        if not admin:
+            try:
+                from seed import seed
+                await seed(session)
+            except Exception as e:
+                print(f"Failed to seed database: {e}")
+                await session.rollback()
 
 
 async def get_db() -> AsyncSession:
