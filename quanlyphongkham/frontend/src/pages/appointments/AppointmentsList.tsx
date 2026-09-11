@@ -54,6 +54,7 @@ export default function AppointmentsList() {
  const createMutation = useMutation({
  mutationFn: (data: any) => appointmentsAPI.create(data),
  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['appointments'] }); setIsCreateOpen(false); reset(); },
+ onError: (error: any) => { alert(error.response?.data?.detail || "Lỗi tạo lịch hẹn"); },
  });
 
  const updateStatusMutation = useMutation({
@@ -93,6 +94,8 @@ export default function AppointmentsList() {
  <DialogContent>
  <DialogHeader><DialogTitle>Đặt lịch khám mới</DialogTitle></DialogHeader>
  <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+ <input type="hidden" {...register('patient_id', { required: true })} />
+ <input type="hidden" {...register('doctor_id', { required: true })} />
  <div className="space-y-2">
  <Label>Bệnh nhân</Label>
  <Select onValueChange={(val) => setValue('patient_id', val)}>
@@ -118,7 +121,7 @@ export default function AppointmentsList() {
  </Select>
  </div>
  <div className="grid grid-cols-2 gap-4">
- <div className="space-y-2"><Label>Ngày khám</Label><Input type="date" {...register('appointment_date', { required: true })} /></div>
+ <div className="space-y-2"><Label>Ngày khám</Label><Input type="date" min={new Date().toISOString().split('T')[0]} {...register('appointment_date', { required: true })} /></div>
  <div className="space-y-2"><Label>Giờ khám</Label><Input type="time" {...register('start_time', { required: true })} /></div>
  </div>
  <div className="space-y-2"><Label>Lý do khám</Label><Input {...register('reason', { required: true })} placeholder="Đau đầu, chóng mặt..." /></div>
