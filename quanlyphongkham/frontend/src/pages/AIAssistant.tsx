@@ -65,6 +65,11 @@ export default function AIAssistant() {
       const response = await aiAPI.streamChat(userMessage, conversationId);
       
       if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.clear();
+          window.location.href = '/login';
+          throw new Error('Phiên đăng nhập hết hạn.');
+        }
         throw new Error(`Lỗi server: ${response.status}`);
       }
       
