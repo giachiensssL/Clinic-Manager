@@ -233,10 +233,11 @@ export default function AIAssistant() {
                   AI Guardrail Active — Nội dung y tế bị chặn
                 </div>
               )}
-              {m.isLoading ? (
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Đang xử lý...</span>
+              {m.isLoading || (m.role === 'assistant' && !m.content) ? (
+                <div className="flex items-center gap-1.5 text-slate-400 py-1.5 px-2">
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               ) : (
                 <div className="whitespace-pre-line">{renderContent(m.content)}</div>
