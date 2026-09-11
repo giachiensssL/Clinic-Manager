@@ -1,24 +1,25 @@
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import AppLayout from './components/layout/AppLayout';
 
 // Pages
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import PatientsList from './pages/patient/PatientsList';
-import PatientDetail from './pages/patient/PatientDetail';
-import AIAssistant from './pages/AIAssistant';
-import AppointmentsList from './pages/appointments/AppointmentsList';
-import DoctorsList from './pages/doctors/DoctorsList';
-import EMRWorkspace from './pages/emr/EMRWorkspace';
-import PrescriptionsList from './pages/prescriptions/PrescriptionsList';
-import BillingList from './pages/billing/BillingList';
-import BillingDetail from './pages/billing/BillingDetail';
-import Reports from './pages/reports/Reports';
-import AuditLogs from './pages/admin/AuditLogs';
-import AISecurityCenter from './pages/admin/AISecurityCenter';
-import UserManagement from './pages/admin/UserManagement';
-import PatientPortal from './pages/portal/PatientPortal';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const PatientsList = lazy(() => import('./pages/patient/PatientsList'));
+const PatientDetail = lazy(() => import('./pages/patient/PatientDetail'));
+const AIAssistant = lazy(() => import('./pages/AIAssistant'));
+const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
+const DoctorsList = lazy(() => import('./pages/doctors/DoctorsList'));
+const EMRWorkspace = lazy(() => import('./pages/emr/EMRWorkspace'));
+const PrescriptionsList = lazy(() => import('./pages/prescriptions/PrescriptionsList'));
+const BillingList = lazy(() => import('./pages/billing/BillingList'));
+const BillingDetail = lazy(() => import('./pages/billing/BillingDetail'));
+const Reports = lazy(() => import('./pages/reports/Reports'));
+const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
+const AISecurityCenter = lazy(() => import('./pages/admin/AISecurityCenter'));
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const PatientPortal = lazy(() => import('./pages/portal/PatientPortal'));
 
 const ProtectedRoute = ({ children, roles }: { children: React.ReactNode; roles?: string[] }) => {
   const { isAuthenticated, user } = useAuthStore();
@@ -31,6 +32,7 @@ const ProtectedRoute = ({ children, roles }: { children: React.ReactNode; roles?
 function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<div className="flex h-screen items-center justify-center text-slate-500">Đang tải trang...</div>}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -73,6 +75,7 @@ function App() {
           <Route path="portal" element={<ProtectedRoute roles={['patient']}><PatientPortal /></ProtectedRoute>} />
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
