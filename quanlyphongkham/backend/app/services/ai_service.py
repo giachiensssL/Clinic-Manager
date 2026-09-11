@@ -301,7 +301,6 @@ class AIService:
         """Stream từ Gemini với tính năng Memory và Tool Calling (Agentic)"""
         try:
             import google.generativeai as genai
-            from google.generativeai.types import content_types
             from sqlalchemy import select
             
             genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -392,10 +391,13 @@ class AIService:
                     tool_result = await book_appointment(db, user.id, args.get("doctor_id", ""), args.get("date_str", ""), args.get("time_str", ""), args.get("reason", ""))
                 
                 # Trả kết quả tool về cho LLM
+                from google.generativeai import protos
                 response = await chat.send_message_async(
-                    content_types.Part.from_function_response(
-                        name=func_name,
-                        response={"result": tool_result}
+                    protos.Part(
+                        function_response=protos.FunctionResponse(
+                            name=func_name,
+                            response={"result": str(tool_result)}
+                        )
                     )
                 )
 

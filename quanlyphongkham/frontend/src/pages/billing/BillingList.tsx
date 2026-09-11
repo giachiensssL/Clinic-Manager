@@ -30,9 +30,9 @@ interface Billing {
 }
 
 const STATUS_CONFIG = {
-  unpaid: { label: 'Chưa thanh toán', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: AlertCircle },
-  partially_paid: { label: 'Thanh toán một phần', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: Clock },
-  paid: { label: 'Đã thanh toán', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: CheckCircle2 },
+  unpaid: { label: 'Chưa thanh toán', color: 'bg-red-100 text-red-700  ', icon: AlertCircle },
+  partially_paid: { label: 'Thanh toán một phần', color: 'bg-amber-100 text-amber-700  ', icon: Clock },
+  paid: { label: 'Đã thanh toán', color: 'bg-green-100 text-green-700  ', icon: CheckCircle2 },
   refunded: { label: 'Hoàn tiền', color: 'bg-slate-100 text-slate-600', icon: CreditCard },
 };
 
@@ -100,7 +100,7 @@ export default function BillingList() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Quản lý Thanh toán</h1>
+        <h1 className="text-2xl font-bold text-slate-900 ">Quản lý Thanh toán</h1>
         <p className="text-sm text-slate-500 mt-1">{billings.length} hóa đơn</p>
       </div>
 
@@ -111,12 +111,12 @@ export default function BillingList() {
           { label: 'Đã thu', value: stats.paid, icon: CheckCircle2, color: 'text-green-600' },
           { label: 'Còn lại', value: stats.unpaid, icon: AlertCircle, color: 'text-red-500' },
         ].map(s => (
-          <div key={s.label} className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+          <div key={s.label} className="bg-white  rounded-xl p-5 border border-slate-200 ">
             <div className="flex items-center gap-3">
               <s.icon className={`w-8 h-8 ${s.color}`} />
               <div>
                 <p className="text-xs text-slate-500">{s.label}</p>
-                <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(s.value)}</p>
+                <p className="text-lg font-bold text-slate-900 ">{formatCurrency(s.value)}</p>
               </div>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function BillingList() {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="bg-white  rounded-xl border border-slate-200  overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-slate-400">Đang tải...</div>
         ) : filtered.length === 0 ? (
@@ -143,29 +143,29 @@ export default function BillingList() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
+              <thead className="bg-slate-50  border-b border-slate-200 ">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Mã hóa đơn</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Bệnh nhân</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Tổng tiền</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Còn nợ</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Trạng thái</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Ngày tạo</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Hành động</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Mã hóa đơn</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Bệnh nhân</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Tổng tiền</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Còn nợ</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Trạng thái</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-600 ">Ngày tạo</th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600 ">Hành động</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              <tbody className="divide-y divide-slate-100 ">
                 {filtered.map(b => {
                   const cfg = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.unpaid;
                   const Icon = cfg.icon;
                   return (
-                    <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                      <td className="px-4 py-3 font-mono font-medium text-slate-900 dark:text-white">{b.invoice_code}</td>
+                    <tr key={b.id} className="hover:bg-slate-50 :bg-slate-700/50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-medium text-slate-900 ">{b.invoice_code}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900 dark:text-white">{b.patient?.full_name ?? 'N/A'}</div>
+                        <div className="font-medium text-slate-900 ">{b.patient?.full_name ?? 'N/A'}</div>
                         <div className="text-xs text-slate-400">{b.patient?.patient_code}</div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{formatCurrency(b.total_amount)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900 ">{formatCurrency(b.total_amount)}</td>
                       <td className="px-4 py-3 text-red-600 font-medium">
                         {b.remaining_amount > 0 ? formatCurrency(b.remaining_amount) : '—'}
                       </td>
@@ -219,7 +219,7 @@ export default function BillingList() {
                 <div><span className="text-slate-500">Bệnh nhân:</span><br /><span className="font-medium">{selected.patient?.full_name ?? 'N/A'}</span></div>
                 <div><span className="text-slate-500">Ngày tạo:</span><br /><span className="font-medium">{formatDate(selected.created_at)}</span></div>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 space-y-2 text-sm">
+              <div className="bg-slate-50  rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Phí khám:</span><span>{formatCurrency(selected.consultation_fee)}</span></div>
                 <div className="flex justify-between"><span>Thuốc:</span><span>{formatCurrency(selected.medicine_fee)}</span></div>
                 <div className="flex justify-between"><span>Dịch vụ:</span><span>{formatCurrency(selected.service_fee)}</span></div>
@@ -249,7 +249,7 @@ export default function BillingList() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Số tiền (đ)</label>
+              <label className="text-sm font-medium text-slate-700 ">Số tiền (đ)</label>
               <Input
                 type="number"
                 value={payAmount}
@@ -259,7 +259,7 @@ export default function BillingList() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phương thức</label>
+              <label className="text-sm font-medium text-slate-700 ">Phương thức</label>
               <Select value={payMethod} onValueChange={setPayMethod}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />

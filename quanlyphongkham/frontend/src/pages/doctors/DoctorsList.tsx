@@ -46,7 +46,7 @@ export default function DoctorsList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Danh sách Bác sĩ</h1>
+          <h1 className="text-2xl font-bold text-slate-900 ">Danh sách Bác sĩ</h1>
           <p className="text-sm text-slate-500 mt-1">
             {filtered.length} bác sĩ đang hoạt động
           </p>
@@ -68,7 +68,7 @@ export default function DoctorsList() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 animate-pulse h-64" />
+            <div key={i} className="bg-white  rounded-xl p-6 border border-slate-200  animate-pulse h-64" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -81,15 +81,15 @@ export default function DoctorsList() {
           {filtered.map(doctor => (
             <div
               key={doctor.id}
-              className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow"
+              className="bg-white  rounded-xl p-6 border border-slate-200  hover:shadow-lg transition-shadow"
             >
               {/* Avatar */}
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                <div className="w-14 h-14 rounded-full bg-blue-100  flex items-center justify-center flex-shrink-0">
                   <Stethoscope className="w-7 h-7 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-slate-900 dark:text-white truncate">
+                  <h3 className="font-semibold text-slate-900  truncate">
                     {doctor.staff?.full_name ?? 'N/A'}
                   </h3>
                   <Badge variant="secondary" className="mt-1 text-xs">
@@ -99,7 +99,7 @@ export default function DoctorsList() {
               </div>
 
               {/* Info */}
-              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300 mb-4">
+              <div className="space-y-2 text-sm text-slate-600  mb-4">
                 <div className="flex items-center gap-2">
                   <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                   <span>{doctor.qualification ?? 'Bác sĩ'}</span>
@@ -116,7 +116,7 @@ export default function DoctorsList() {
                 )}
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                  <span className="font-medium text-green-600 dark:text-green-400">
+                  <span className="font-medium text-green-600 ">
                     {formatCurrency(doctor.consultation_fee)} / lần khám
                   </span>
                 </div>
@@ -125,7 +125,7 @@ export default function DoctorsList() {
               {/* Status */}
               <div className="mb-4">
                 <Badge className={doctor.is_active
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  ? 'bg-green-100 text-green-700  '
                   : 'bg-red-100 text-red-700'
                 }>
                   {doctor.is_active ? '● Đang làm việc' : '● Nghỉ'}
@@ -168,18 +168,18 @@ export default function DoctorsList() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="text-sm text-slate-500 mb-4">
-              <span className="font-medium text-slate-700 dark:text-slate-200">Chuyên khoa:</span>{' '}
+              <span className="font-medium text-slate-700 ">Chuyên khoa:</span>{' '}
               {scheduleDoctor?.specialty?.name} · {scheduleDoctor?.department?.name}
             </div>
             {[0, 1, 2, 3, 4, 5].map(day => (
               <div
                 key={day}
-                className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0"
+                className="flex items-center justify-between py-2 border-b border-slate-100  last:border-0"
               >
-                <span className="font-medium text-sm text-slate-700 dark:text-slate-200 w-20">
+                <span className="font-medium text-sm text-slate-700  w-20">
                   {DAY_NAMES[day]}
                 </span>
-                <span className="text-sm text-green-600 dark:text-green-400">
+                <span className="text-sm text-green-600 ">
                   07:30 – 17:00
                 </span>
               </div>
