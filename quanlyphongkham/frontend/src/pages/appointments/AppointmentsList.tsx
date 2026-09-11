@@ -62,7 +62,25 @@ export default function AppointmentsList() {
  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
  });
 
- const onSubmit = (data: any) => createMutation.mutate(data);
+  const onSubmit = (data: any) => {
+    // find doctor to get specialty_id
+    const doctor = doctors.find(d => d.id === data.doctor_id);
+    const payload = {
+      ...data,
+      specialty_id: doctor?.specialty?.id,
+      // end time is start time + 30 mins
+      end_time: data.start_time ? (() => {
+        const [h, m] = data.start_time.split(':').map(Number);
+        const date = new Date();
+        date.setHours(h, m + 30, 0);
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:00`;
+      })() : '00:00:00'
+    };
+    if (data.start_time && data.start_time.length === 5) {
+      payload.start_time = `${data.start_time}:00`;
+    }
+    createMutation.mutate(payload);
+  };
 
  return (
  <div className="space-y-6">

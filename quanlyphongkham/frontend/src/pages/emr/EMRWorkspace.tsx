@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Clock, FileSignature, AlertCircle, Bot, Loader2, Save } from 'lucide-react';
-import { appointmentsAPI, emrAPI } from '@/services/api';
+import { appointmentsAPI, emrAPI, billingAPI } from '@/services/api';
 import { format } from 'date-fns';
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
@@ -121,6 +121,17 @@ export default function EMRWorkspace() {
     mutationFn: async () => {
       if (emrData?.id) {
         await emrAPI.signAndLock(emrData.id);
+        // auto create billing if possible
+        try {
+          await billingAPI.create({
+            appointment_id: selectedApt.id,
+            consultation_fee: 150000,
+            medicine_fee: 0,
+            service_fee: 0
+          });
+        } catch (e) {
+          console.error('Failed to create billing', e);
+        }
       }
     },
     onSuccess: () => {
