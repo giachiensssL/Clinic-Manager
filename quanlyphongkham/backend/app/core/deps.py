@@ -39,6 +39,7 @@ def require_roles(*roles: UserRole):
 # Convenience dependencies
 get_admin = require_roles(UserRole.ADMIN)
 get_doctor = require_roles(UserRole.DOCTOR, UserRole.ADMIN)
+get_clinical_doctor = require_roles(UserRole.DOCTOR)
 get_receptionist = require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)
 get_accountant = require_roles(UserRole.ACCOUNTANT, UserRole.ADMIN)
 get_staff = require_roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.ACCOUNTANT)

@@ -57,6 +57,15 @@ class PaymentMethod(str, enum.Enum):
     TRANSFER = "transfer"
 
 
+class QueueStatus(str, enum.Enum):
+    WAITING = "waiting"
+    CALLED = "called"
+    IN_CONSULTATION = "in_consultation"
+    COMPLETED = "completed"
+    NO_SHOW = "no_show"
+    CANCELLED = "cancelled"
+
+
 class EMRStatus(str, enum.Enum):
     DRAFT = "draft"
     COMPLETED = "completed"
@@ -179,6 +188,7 @@ class Doctor(Base):
     specialty: Mapped["Specialty"] = relationship("Specialty", back_populates="doctors")
     working_schedules: Mapped[List["WorkingSchedule"]] = relationship("WorkingSchedule", back_populates="doctor")
     appointments: Mapped[List["Appointment"]] = relationship("Appointment", back_populates="doctor")
+    queues: Mapped[List["Queue"]] = relationship("Queue", back_populates="doctor")
 
     __table_args__ = (
         Index("ix_doctors_specialty_id", "specialty_id"),
@@ -227,6 +237,7 @@ class Patient(Base):
     allergies: Mapped[Optional[str]] = mapped_column(Text)  # JSON list of allergies
     insurance_number: Mapped[Optional[str]] = mapped_column(String(50))
     insurance_provider: Mapped[Optional[str]] = mapped_column(String(255))
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
     emergency_contact_name: Mapped[Optional[str]] = mapped_column(String(255))
     emergency_contact_phone: Mapped[Optional[str]] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -238,6 +249,7 @@ class Patient(Base):
     appointments: Mapped[List["Appointment"]] = relationship("Appointment", back_populates="patient")
     consultations: Mapped[List["Consultation"]] = relationship("Consultation", back_populates="patient")
     billings: Mapped[List["Billing"]] = relationship("Billing", back_populates="patient")
+    queues: Mapped[List["Queue"]] = relationship("Queue", back_populates="patient")
 
     __table_args__ = (
         Index("ix_patients_phone", "phone"),
@@ -275,6 +287,7 @@ class Appointment(Base):
     specialty: Mapped["Specialty"] = relationship("Specialty")
     consultation: Mapped[Optional["Consultation"]] = relationship("Consultation", back_populates="appointment", uselist=False)
     billing: Mapped[Optional["Billing"]] = relationship("Billing", back_populates="appointment", uselist=False)
+    queue: Mapped[Optional["Queue"]] = relationship("Queue", back_populates="appointment", uselist=False)
 
     __table_args__ = (
         # DOUBLE BOOKING PREVENTION: unique constraint at DB level
@@ -285,6 +298,37 @@ class Appointment(Base):
         Index("ix_appointments_patient_id", "patient_id"),
         Index("ix_appointments_doctor_date", "doctor_id", "appointment_date"),
         Index("ix_appointments_status", "status"),
+    )
+
+
+# ===================== QUEUE =====================
+
+class Queue(Base):
+    __tablename__ = "queues"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    appointment_id: Mapped[str] = mapped_column(ForeignKey("appointments.id"), unique=True, nullable=False)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    doctor_id: Mapped[str] = mapped_column(ForeignKey("doctors.id"), nullable=False)
+    queue_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    check_in_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    called_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    start_consultation_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    status: Mapped[QueueStatus] = mapped_column(Enum(QueueStatus), default=QueueStatus.WAITING)
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    appointment: Mapped["Appointment"] = relationship("Appointment", back_populates="queue")
+    patient: Mapped["Patient"] = relationship("Patient", back_populates="queues")
+    doctor: Mapped["Doctor"] = relationship("Doctor", back_populates="queues")
+
+    __table_args__ = (
+        Index("ix_queues_appointment_id", "appointment_id"),
+        Index("ix_queues_doctor_id", "doctor_id"),
+        Index("ix_queues_status", "status"),
+        UniqueConstraint("doctor_id", "queue_number", name="uq_queues_doctor_number"),
     )
 
 
@@ -590,4 +634,71 @@ class AIToolCall(Base):
     __table_args__ = (
         Index("ix_ai_tool_calls_user_id", "user_id"),
         Index("ix_ai_tool_calls_tool_name", "tool_name"),
+    )
+
+
+# ===================== NOTIFICATIONS & LAB RESULTS =====================
+
+class NotificationType(str, enum.Enum):
+    APPOINTMENT = "appointment"
+    LAB_RESULT = "lab_result"
+    PRESCRIPTION = "prescription"
+    BILLING = "billing"
+    SYSTEM = "system"
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtype"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    reference_id: Mapped[Optional[str]] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    user: Mapped["User"] = relationship()
+    
+    __table_args__ = (
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_created_at", "created_at"),
+    )
+
+class LabResultStatus(str, enum.Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class LabResult(Base):
+    __tablename__ = "lab_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    doctor_id: Mapped[Optional[str]] = mapped_column(ForeignKey("doctors.id"))
+    consultation_id: Mapped[Optional[str]] = mapped_column(ForeignKey("consultations.id"))
+    
+    test_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    test_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[LabResultStatus] = mapped_column(Enum(LabResultStatus, name="labresultstatus"), default=LabResultStatus.PENDING)
+    
+    # JSON array cho cac chi so vd: [{"name": "Hong cau", "value": 4.5, "unit": "T/L", "ref": "4.0-5.8", "is_abnormal": False}]
+    result_data: Mapped[Optional[list]] = mapped_column(JSON)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    file_url: Mapped[Optional[str]] = mapped_column(String(255))
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    
+    # Relationships
+    patient: Mapped["Patient"] = relationship()
+    doctor: Mapped["Doctor"] = relationship()
+    consultation: Mapped["Consultation"] = relationship()
+    
+    __table_args__ = (
+        Index("ix_lab_results_patient_id", "patient_id"),
+        Index("ix_lab_results_status", "status"),
     )

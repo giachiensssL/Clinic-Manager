@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.deps import get_doctor, get_staff, get_current_user
 from app.models.models import (
     Prescription, PrescriptionItem, Medicine, Consultation,
-    User, AuditAction,
+    User, AuditAction, Doctor, UserRole
 )
 from app.services.audit_service import log_action
 
@@ -32,8 +32,8 @@ async def list_prescriptions(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     query = select(Prescription).options(
-        selectinload(Prescription.patient),
-        selectinload(Prescription.doctor).selectinload(User.staff),
+        selectinload(Prescription.consultation).selectinload(Consultation.patient),
+        selectinload(Prescription.consultation).selectinload(Consultation.doctor).selectinload(Doctor.staff),
         selectinload(Prescription.items).selectinload(PrescriptionItem.medicine)
     ).order_by(Prescription.created_at.desc())
     
@@ -55,8 +55,8 @@ async def list_prescriptions(
         response.append({
             "id": rx.id,
             "prescription_code": rx.prescription_code,
-            "patient_name": rx.patient.full_name if rx.patient else "N/A",
-            "doctor_name": rx.doctor.staff.full_name if (rx.doctor and rx.doctor.staff) else "N/A",
+            "patient_name": rx.consultation.patient.full_name if (rx.consultation and rx.consultation.patient) else "N/A",
+            "doctor_name": rx.consultation.doctor.staff.full_name if (rx.consultation and rx.consultation.doctor and rx.consultation.doctor.staff) else "N/A",
             "created_at": rx.created_at.isoformat(),
             "status": "dispensed" if rx.dispensed_at else "pending",
             "items_count": len(rx.items)
@@ -114,6 +114,15 @@ async def get_prescription(
     if not rx:
         raise HTTPException(status_code=404, detail="Khong tim thay don thuoc")
 
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        from sqlalchemy import select
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if rx.patient_id != pid:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập dữ liệu của bệnh nhân khác")
+
     await log_action(db, current_user, AuditAction.READ, "prescriptions", prescription_id)
 
     return {
@@ -160,6 +169,15 @@ async def add_prescription_item(
     if not rx:
         raise HTTPException(status_code=404, detail="Khong tim thay don thuoc")
 
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        from sqlalchemy import select
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if rx.patient_id != pid:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập dữ liệu của bệnh nhân khác")
+
     medicine = (await db.execute(select(Medicine).where(Medicine.id == medicine_id, Medicine.is_active == True))).scalar_one_or_none()
     if not medicine:
         raise HTTPException(status_code=404, detail="Khong tim thay thuoc")
@@ -193,6 +211,15 @@ async def dispense_prescription(
     rx = (await db.execute(select(Prescription).where(Prescription.id == prescription_id))).scalar_one_or_none()
     if not rx:
         raise HTTPException(status_code=404, detail="Khong tim thay don thuoc")
+
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        from sqlalchemy import select
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if rx.patient_id != pid:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập dữ liệu của bệnh nhân khác")
     if rx.dispensed_at:
         raise HTTPException(status_code=400, detail="Don thuoc da duoc cap phat truoc do")
 

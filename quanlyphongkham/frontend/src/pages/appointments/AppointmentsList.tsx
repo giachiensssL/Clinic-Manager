@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuthStore } from '@/store/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Card, CardContent } from '@/components/ui/card';
@@ -42,7 +43,10 @@ export default function AppointmentsList() {
  },
  });
 
- const { data: patientsRes } = useQuery({ queryKey: ['patients'], queryFn: async () => (await patientsAPI.getAll({})).data });
+ const { user } = useAuthStore();
+ const isPatient = user?.role === 'patient';
+
+  const { data: patientsRes } = useQuery({ queryKey: ['patients'], queryFn: async () => (await patientsAPI.getAll({})).data, enabled: user?.role !== 'patient' });
  const { data: doctorsRes } = useQuery({ queryKey: ['doctors'], queryFn: async () => (await doctorsAPI.getAll({})).data });
 
  const appointments = appointmentsResponse?.items || [];
@@ -50,6 +54,11 @@ export default function AppointmentsList() {
  const doctors: any[] = doctorsRes?.items ?? doctorsRes ?? [];
 
  const { register, handleSubmit, reset, setValue } = useForm();
+ const { data: patientProfile } = useQuery({ 
+   queryKey: ['patient-me'], 
+   queryFn: async () => (await patientsAPI.getMe()).data,
+   enabled: isPatient 
+ });
 
  const createMutation = useMutation({
  mutationFn: (data: any) => appointmentsAPI.create(data),
@@ -68,6 +77,7 @@ export default function AppointmentsList() {
     const doctor = doctors.find(d => d.id === data.doctor_id);
     const payload = {
       ...data,
+      patient_id: isPatient ? patientProfile?.id : data.patient_id,
       specialty_id: doctor?.specialty?.id,
       // end time is start time + 30 mins
       end_time: data.start_time ? (() => {
@@ -94,8 +104,9 @@ export default function AppointmentsList() {
  <DialogContent>
  <DialogHeader><DialogTitle>Đặt lịch khám mới</DialogTitle></DialogHeader>
  <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
- <input type="hidden" {...register('patient_id', { required: true })} />
+ {!isPatient && <input type="hidden" {...register('patient_id', { required: !isPatient })} />}
  <input type="hidden" {...register('doctor_id', { required: true })} />
+ {!isPatient && (
  <div className="space-y-2">
  <Label>Bệnh nhân</Label>
  <Select onValueChange={(val) => setValue('patient_id', val)}>
@@ -107,6 +118,7 @@ export default function AppointmentsList() {
  </SelectContent>
  </Select>
  </div>
+ )}
  <div className="space-y-2">
  <Label>Bác sĩ</Label>
  <Select onValueChange={(val) => setValue('doctor_id', val)}>
@@ -198,6 +210,8 @@ export default function AppointmentsList() {
  </Button>
  </DropdownMenuTrigger>
  <DropdownMenuContent align="end">
+ {!isPatient && (
+   <>
  <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: apt.id, status: 'waiting' })}>
  <Clock className="mr-2 h-4 w-4 text-amber-500" /> Chờ khám
  </DropdownMenuItem>
@@ -211,6 +225,8 @@ export default function AppointmentsList() {
  <CreditCard className="mr-2 h-4 w-4 text-teal-500" /> Đã thanh toán
  </DropdownMenuItem>
  <DropdownMenuSeparator />
+   </>
+ )}
  <DropdownMenuItem className="text-red-600" onClick={() => updateStatusMutation.mutate({ id: apt.id, status: 'cancelled' })}>
  <XCircle className="mr-2 h-4 w-4" /> Hủy lịch
  </DropdownMenuItem>

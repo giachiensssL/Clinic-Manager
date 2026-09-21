@@ -1,0 +1,2 @@
+422
+{"detail":[{"type":"missing","loc":["query","patient_id"],"msg":"Field required","input":null},{"type":"missing","loc":["query","doctor_id"],"msg":"Field required","input":null},{"type":"missing","loc":["query","specialty_id"],"msg":"Field required","input":null},{"type":"missing","loc":["query","appointment_date"],"msg":"Field required","input":null},{"type":"missing","loc":["query","start_time"],"msg":"Field required","input":null},{"type":"missing","loc":["query","end_time"],"msg":"Field required","input":null}]}

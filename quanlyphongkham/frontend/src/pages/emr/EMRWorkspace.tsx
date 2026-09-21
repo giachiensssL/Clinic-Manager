@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/authStore';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,8 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
 };
 
 export default function EMRWorkspace() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
   const queryClient = useQueryClient();
   const [selectedApt, setSelectedApt] = useState<any>(null);
 
@@ -139,7 +142,9 @@ export default function EMRWorkspace() {
     }
   });
 
-  const handleChange = (e: any) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e: any) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
   const handleSave = () => saveMutation.mutate(formData);
   const handleLock = () => {
     if (confirm("Sau khi ký và khóa, bạn sẽ không thể chỉnh sửa hồ sơ này. Bạn có chắc chắn?")) {
@@ -148,13 +153,16 @@ export default function EMRWorkspace() {
   };
 
   const patient = selectedApt?.patient;
-  const isLocked = emrData?.status === 'locked';
+  const isLocked = emrData?.status === 'locked' || isAdmin;
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] gap-4 overflow-hidden -m-2">
+    <div className="flex h-[calc(100vh-6rem)] gap-4">
       {/* Sidebar Queue */}
-      <div className="w-72 bg-white border rounded-xl shadow-sm flex flex-col overflow-hidden">
-        <div className="p-4 border-b bg-slate-50"><h3 className="font-bold text-[#1e3a5f]">Hàng Đợi (Hôm nay)</h3></div>
+      <div className="w-80 bg-white border rounded-xl shadow-sm flex flex-col overflow-hidden">
+        <div className="p-4 border-b bg-slate-50">
+          <h2 className="font-bold text-[#1e3a5f]">Hàng Đợi Khám ({appointments.length})</h2>
+          {isAdmin && <div className="mt-2 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">Admin Mode: Read Only</div>}
+        </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {appointments.length === 0 ? (
             <div className="p-4 text-center text-sm text-slate-500">Không có lịch khám hôm nay</div>

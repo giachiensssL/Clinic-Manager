@@ -133,6 +133,13 @@ async def get_billing(
     if not b:
         raise HTTPException(status_code=404, detail="Khong tim thay hoa don")
 
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if b.patient_id != pid:
+            raise HTTPException(status_code=403, detail="Khong co quyen truy cap hoa don cua nguoi khac")
+
     await log_action(db, current_user, AuditAction.READ, "billing", billing_id)
 
     return {

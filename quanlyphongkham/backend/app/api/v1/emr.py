@@ -13,10 +13,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.deps import get_doctor, get_current_user
+from app.core.deps import get_doctor, get_current_user, get_clinical_doctor
 from app.models.models import (
     Consultation, EMRStatus, Appointment, AppointmentStatus,
-    ConsultationDiagnosis, Diagnosis, User, AuditAction,
+    ConsultationDiagnosis, Diagnosis, User, AuditAction, Doctor
 )
 from app.services.audit_service import log_action
 
@@ -34,7 +34,7 @@ async def create_consultation(
     height: Optional[float] = None,
     oxygen_saturation: Optional[float] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_doctor),
+    current_user: User = Depends(get_clinical_doctor),
 ) -> dict:
     """Tao ho so benh an moi cho mot lich hen — chi bac si duoc phep"""
     # Lay appointment va kiem tra trang thai
@@ -51,6 +51,12 @@ async def create_consultation(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Lich hen nay da co ho so benh an")
+
+    from app.models.models import Doctor, Staff
+    d_res = await db.execute(select(Doctor.id).join(Staff, Doctor.staff_id == Staff.id).where(Staff.user_id == current_user.id))
+    doc_id = d_res.scalar_one_or_none()
+    if not doc_id or appt.doctor_id != doc_id:
+        raise HTTPException(status_code=403, detail="Khong co quyen tao benh an cho lich hen cua bac si khac")
 
     # Cap nhat trang thai appointment -> IN_CONSULTATION
     appt.status = AppointmentStatus.IN_CONSULTATION
@@ -94,6 +100,16 @@ async def get_consultation(
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Khong tim thay ho so benh an")
+
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if c.patient_id != pid:
+            raise HTTPException(status_code=403, detail="Khong co quyen truy cap ho so benh an cua nguoi khac")
+
+    if current_user.role.value == "receptionist":
+        raise HTTPException(status_code=403, detail="Lễ tân không được phép truy cập hồ sơ bệnh án chuyên môn")
 
     await log_action(db, current_user, AuditAction.READ, "consultations", consultation_id)
 
@@ -172,7 +188,7 @@ async def list_consultations_by_patient(
         select(Consultation)
         .options(
             selectinload(Consultation.diagnoses).selectinload(ConsultationDiagnosis.diagnosis),
-            selectinload(Consultation.doctor).selectinload(User.staff) # Or Doctor model
+            selectinload(Consultation.doctor).selectinload(Doctor.staff)
         )
         .where(Consultation.patient_id == patient_id)
         .order_by(Consultation.created_at.desc())
@@ -200,7 +216,7 @@ async def update_consultation(
     chief_complaint: Optional[str] = None,
     follow_up_notes: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_doctor),
+    current_user: User = Depends(get_clinical_doctor),
 ) -> dict:
     """Cap nhat noi dung ho so benh an — chi khi chua khoa"""
     result = await db.execute(select(Consultation).where(Consultation.id == consultation_id))
@@ -209,6 +225,12 @@ async def update_consultation(
         raise HTTPException(status_code=404, detail="Khong tim thay ho so benh an")
     if c.status == EMRStatus.LOCKED:
         raise HTTPException(status_code=403, detail="Ho so benh an da bi khoa, khong the sua")
+        
+    from app.models.models import Doctor, Staff
+    d_res = await db.execute(select(Doctor.id).join(Staff, Doctor.staff_id == Staff.id).where(Staff.user_id == current_user.id))
+    doc_id = d_res.scalar_one_or_none()
+    if not doc_id or c.doctor_id != doc_id:
+        raise HTTPException(status_code=403, detail="Khong co quyen sua benh an cua bac si khac")
 
     if clinical_notes is not None:
         c.clinical_notes = clinical_notes
@@ -229,7 +251,7 @@ async def update_consultation(
 async def sign_and_lock_consultation(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_doctor),
+    current_user: User = Depends(get_clinical_doctor),
 ) -> dict:
     """
     Bac si ky so va khoa ho so benh an.
@@ -242,6 +264,12 @@ async def sign_and_lock_consultation(
         raise HTTPException(status_code=404, detail="Khong tim thay ho so benh an")
     if c.status == EMRStatus.LOCKED:
         raise HTTPException(status_code=400, detail="Ho so da duoc khoa truoc do")
+        
+    from app.models.models import Doctor, Staff
+    d_res = await db.execute(select(Doctor.id).join(Staff, Doctor.staff_id == Staff.id).where(Staff.user_id == current_user.id))
+    doc_id = d_res.scalar_one_or_none()
+    if not doc_id or c.doctor_id != doc_id:
+        raise HTTPException(status_code=403, detail="Khong co quyen ky benh an cua bac si khac")
 
     now = datetime.now(timezone.utc)
 

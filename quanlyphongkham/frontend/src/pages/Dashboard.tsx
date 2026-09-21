@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Users, Calendar, CheckCircle2, DollarSign, Stethoscope, Bot,
-  Clock, TrendingUp, AlertTriangle, FileText
+  Clock, TrendingUp, AlertTriangle, FileText, UserCog, Shield, ShieldCheck
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,6 +11,9 @@ import {
 } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+import { adminKPIs, aiInsights, mockAuditLogs, mockSystemNotifications } from '@/mock/adminData';
 
 const revenueData = [
   { name: 'T2', total: 35 },
@@ -59,70 +62,164 @@ export default function Dashboard() {
   if (user?.role === 'patient') {
     return <Navigate to="/portal" replace />;
   }
+  if (user?.role === 'doctor') {
+    return <Navigate to="/doctor" replace />;
+  }
+  if (user?.role === 'receptionist') {
+    return <Navigate to="/receptionist" replace />;
+  }
 
   // ── ADMIN DASHBOARD ──────────────────────────────────
   const renderAdminDashboard = () => (
     <div className="space-y-6">
+      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Tổng Bệnh Nhân', value: '1,284', sub: '+12% so với tháng trước', icon: Users, color: 'text-blue-600' },
-          { label: 'Lịch Hẹn Hôm Nay', value: '24', sub: '4 đang chờ • 5 đang khám', icon: Calendar, color: 'text-sky-600' },
-          { label: 'Doanh Thu (Ngày)', value: '45.6M', sub: '+8% so với hôm qua', icon: DollarSign, color: 'text-green-600' },
-          { label: 'Yêu Cầu AI (Tháng)', value: '3,456', sub: '28 bị chặn bởi guardrail', icon: Bot, color: 'text-violet-600' },
+          { label: 'Tổng người dùng', value: adminKPIs.totalUsers.value, sub: `${adminKPIs.totalUsers.change} so với tuần trước`, icon: Users, color: 'text-blue-600', link: '/admin/users' },
+          { label: 'Nhân viên', value: adminKPIs.totalStaff.value, sub: `${adminKPIs.totalStaff.change} nhân viên mới`, icon: UserCog, color: 'text-sky-600', link: '/admin/staff' },
+          { label: 'Lịch khám hôm nay', value: adminKPIs.todayAppointments.value, sub: `${adminKPIs.todayAppointments.change} so với hôm qua`, icon: Calendar, color: 'text-indigo-600', link: '/admin/schedules' },
+          { label: 'Doanh thu hôm nay', value: adminKPIs.todayRevenue.value, sub: `${adminKPIs.todayRevenue.change} so với hôm qua`, icon: DollarSign, color: 'text-green-600', link: '/reports?tab=overview' },
         ].map(s => (
           <Card key={s.label}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{s.label}</CardTitle>
-              <s.icon className={`h-4 w-4 ${s.color}`} />
+              <div className={`p-2 rounded-lg bg-slate-50 ${s.color}`}>
+                <s.icon className="h-4 w-4" />
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{s.sub}</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-emerald-600 font-medium">{s.sub}</p>
+                <Link to={s.link} className="text-xs text-blue-600 hover:underline">Xem chi tiết &rarr;</Link>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader><CardTitle>Doanh thu 7 ngày qua (triệu đồng)</CardTitle></CardHeader>
-          <CardContent className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(v) => `${v}M đ`} />
-                <Area type="monotone" dataKey="total" stroke="#0ea5e9" fill="#e0f2fe" name="Doanh thu" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Charts */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Thống kê hoạt động hệ thống</CardTitle>
+              <select className="text-sm border border-slate-200 rounded-lg px-2 py-1 outline-none"><option>7 ngày gần đây</option></select>
+            </CardHeader>
+            <CardContent className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="total" stroke="#0ea5e9" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" name="Lượt truy cập" />
+                  <defs>
+                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Trạng thái lịch hẹn hôm nay</CardTitle></CardHeader>
-          <CardContent className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={appointmentStatusData}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={60}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {appointmentStatusData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader><CardTitle>Phân bổ người dùng</CardTitle></CardHeader>
+              <CardContent className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={[{name: 'Bệnh nhân', value: 855}, {name: 'Bác sĩ', value: 154}, {name: 'Lễ tân', value: 127}, {name: 'Kế toán', value: 76}]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
+                      <Cell fill="#3b82f6" />
+                      <Cell fill="#10b981" />
+                      <Cell fill="#f59e0b" />
+                      <Cell fill="#8b5cf6" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader><CardTitle>Nhật ký hệ thống gần đây</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {mockAuditLogs.slice(0, 4).map(log => (
+                    <div key={log.id} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-slate-800">{log.user} <span className="text-slate-400 font-normal">({log.role})</span></span>
+                        <span className="text-xs text-slate-500">{log.action} - {log.module}</span>
+                      </div>
+                      <span className="text-xs text-slate-400">{log.time.split(' ')[1]}</span>
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* AI Sidebar & Alerts */}
+        <div className="space-y-6">
+          <Card className="border-[#0D6EFD]/20 shadow-md shadow-[#0D6EFD]/5">
+            <CardHeader className="bg-[#0D6EFD]/5 pb-4 border-b border-[#0D6EFD]/10 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#0D6EFD] flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <CardTitle className="text-[#0B3B78]">Phân tích AI quản trị</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="space-y-4">
+                {aiInsights.slice(0, 5).map(insight => (
+                  <div key={insight.id} className="flex gap-3 text-sm">
+                    <div className="mt-0.5 flex-shrink-0">
+                      {insight.type === 'error' ? <Shield className="w-4 h-4 text-red-500" /> :
+                       insight.type === 'warning' ? <ShieldCheck className="w-4 h-4 text-amber-500" /> :
+                       insight.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> :
+                       <Bot className="w-4 h-4 text-blue-500" />}
+                    </div>
+                    <div>
+                      <p className={cn("font-medium", 
+                        insight.type === 'error' ? 'text-red-700' :
+                        insight.type === 'warning' ? 'text-amber-700' : 'text-slate-700'
+                      )}>{insight.message}</p>
+                      <p className="text-xs text-slate-400 mt-1">{insight.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button className="w-full mt-6 bg-[#0D6EFD] hover:bg-blue-600 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                Xem báo cáo chi tiết
+              </button>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row justify-between items-center pb-2 border-b border-slate-100">
+              <CardTitle>Thông báo hệ thống</CardTitle>
+              <Link to="/admin/notifications" className="text-xs text-blue-600 hover:underline">Xem tất cả</Link>
+            </CardHeader>
+            <CardContent className="pt-4 p-0">
+              <div className="divide-y divide-slate-100">
+                {mockSystemNotifications.slice(0, 4).map(n => (
+                  <div key={n.id} className="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
+                    <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", n.priority === 'high' ? 'bg-red-500' : 'bg-blue-500')} />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{n.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{n.content}</p>
+                      <p className="text-xs text-slate-400 mt-1">{n.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -359,10 +456,10 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {user?.role === 'admin' && renderAdminDashboard()}
-      {user?.role === 'doctor' && renderDoctorDashboard()}
-      {user?.role === 'receptionist' && renderReceptionistDashboard()}
-      {user?.role === 'accountant' && renderAccountantDashboard()}
+      {(user?.role as string) === 'admin' && renderAdminDashboard()}
+      {(user?.role as string) === 'doctor' && renderDoctorDashboard()}
+      {(user?.role as string) === 'receptionist' && renderReceptionistDashboard()}
+      {(user?.role as string) === 'accountant' && renderAccountantDashboard()}
     </div>
   );
 }

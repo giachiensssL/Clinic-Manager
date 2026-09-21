@@ -1,6 +1,7 @@
 """
 Appointments API — Quan ly lich hen kham
 """
+from app.models.models import Department
 import uuid
 from typing import Optional
 from datetime import date, time, datetime, timezone
@@ -17,6 +18,7 @@ from app.models.models import (
     User, UserRole, AuditAction,
 )
 from app.services.audit_service import log_action
+from app.schemas.appointment import AppointmentCreate
 
 router = APIRouter()
 
@@ -41,6 +43,7 @@ async def list_appointments(
     query = select(Appointment).options(
         selectinload(Appointment.patient),
         selectinload(Appointment.doctor).selectinload(Doctor.staff),
+        selectinload(Appointment.doctor).selectinload(Doctor.specialty),
     )
 
     # RBAC filter
@@ -54,16 +57,18 @@ async def list_appointments(
         else:
             return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
     elif current_user.role == UserRole.DOCTOR:
-        doc_result = await db.execute(
-            select(Doctor.id).where(
-                Doctor.staff_id == (
-                    select(User).where(User.id == current_user.id).scalar_subquery()
-                )
-            )
-        )
-        # Filter theo doctor nay
-        if doctor_id:
-            query = query.where(Appointment.doctor_id == doctor_id)
+        from app.models.models import Staff
+        staff_result = await db.execute(select(Staff.id).where(Staff.user_id == current_user.id))
+        staff_id = staff_result.scalar_one_or_none()
+        if staff_id:
+            doc_result = await db.execute(select(Doctor.id).where(Doctor.staff_id == staff_id))
+            doc_id = doc_result.scalar_one_or_none()
+            if doc_id:
+                query = query.where(Appointment.doctor_id == doc_id)
+            else:
+                return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
+        else:
+            return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
 
     if appointment_date:
         query = query.where(Appointment.appointment_date == appointment_date)
@@ -114,29 +119,37 @@ async def list_appointments(
 
 @router.post("", summary="Dat lich hen moi", status_code=201)
 async def create_appointment(
-    patient_id: str,
-    doctor_id: str,
-    specialty_id: str,
-    appointment_date: date,
-    start_time: time,
-    end_time: time,
-    reason: Optional[str] = None,
+    payload: AppointmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_staff),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Dat lich hen moi — kiem tra trung lich truoc khi tao"""
+    """Dat lich hen moi - kiem tra trung lich truoc khi tao"""
+    from app.models.models import UserRole, Patient
+    if current_user.role == UserRole.PATIENT:
+        pat_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pat_id = pat_result.scalar_one_or_none()
+        if not pat_id or pat_id != payload.patient_id:
+            raise HTTPException(status_code=403, detail="Khong the tao lich hen cho benh nhan khac")
+
     # Kiem tra bac si ton tai
-    doc = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    doc_result = await db.execute(
+        select(Doctor)
+        .options(selectinload(Doctor.staff))
+        .where(Doctor.id == payload.doctor_id)
+    )
+    doc = doc_result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Khong tim thay bac si")
+    if not doc.staff:
+        raise HTTPException(status_code=400, detail="Bac si hien khong hoat dong hoac da nghi viec")
 
     # Kiem tra trung lich (DB unique constraint se bat, nhung kiem tra truoc cho UX tot hon)
     existing = await db.execute(
         select(Appointment).where(
             and_(
-                Appointment.doctor_id == doctor_id,
-                Appointment.appointment_date == appointment_date,
-                Appointment.start_time == start_time,
+                Appointment.doctor_id == payload.doctor_id,
+                Appointment.appointment_date == payload.appointment_date,
+                Appointment.start_time == payload.start_time,
                 Appointment.status.notin_([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW]),
             )
         )
@@ -147,14 +160,14 @@ async def create_appointment(
     appointment = Appointment(
         id=str(uuid.uuid4()),
         appointment_code=_generate_appointment_code(),
-        patient_id=patient_id,
-        doctor_id=doctor_id,
-        specialty_id=specialty_id,
-        appointment_date=appointment_date,
-        start_time=start_time,
-        end_time=end_time,
+        patient_id=payload.patient_id,
+        doctor_id=payload.doctor_id,
+        specialty_id=payload.specialty_id if payload.specialty_id != 'general' else None,
+        appointment_date=payload.appointment_date,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
         status=AppointmentStatus.SCHEDULED,
-        reason=reason,
+        reason=payload.reason,
         created_by=current_user.id,
     )
     db.add(appointment)
@@ -191,6 +204,15 @@ async def get_appointment(
     if not appt:
         raise HTTPException(status_code=404, detail="Khong tim thay lich hen")
 
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        from sqlalchemy import select
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if appt.patient_id != pid:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập dữ liệu của bệnh nhân khác")
+
     await log_action(db, current_user, AuditAction.READ, "appointments", appointment_id)
 
     return {
@@ -218,13 +240,34 @@ async def update_appointment_status(
     notes: Optional[str] = None,
     cancellation_reason: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_staff),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Cap nhat trang thai lich hen (check-in, hoan thanh, huy, ...)"""
     result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
     appt = result.scalar_one_or_none()
     if not appt:
         raise HTTPException(status_code=404, detail="Khong tim thay lich hen")
+
+    if current_user.role.value == "patient":
+        from app.models.models import Patient
+        from sqlalchemy import select
+        pid_result = await db.execute(select(Patient.id).where(Patient.user_id == current_user.id))
+        pid = pid_result.scalar_one_or_none()
+        if appt.patient_id != pid:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập dữ liệu của bệnh nhân khác")
+
+    # RBAC logic
+    if current_user.role == UserRole.PATIENT:
+        patient_result = await db.execute(select(Patient).where(Patient.user_id == current_user.id))
+        patient = patient_result.scalar_one_or_none()
+        if not patient or appt.patient_id != patient.id:
+            raise HTTPException(status_code=403, detail="Khong co quyen cap nhat lich hen nay")
+        if new_status != AppointmentStatus.CANCELLED.value:
+            raise HTTPException(status_code=403, detail="Benh nhan chi co the huy lich hen")
+
+    if appt.status in [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW]:
+        raise HTTPException(status_code=400, detail=f"Khong the doi trang thai lich hen da ket thuc hoac da huy")
 
     try:
         appt.status = AppointmentStatus(new_status)
@@ -238,10 +281,12 @@ async def update_appointment_status(
         appt.cancelled_at = now
         appt.cancellation_reason = cancellation_reason
 
-    if notes:
+    if notes and current_user.role != UserRole.PATIENT:
         appt.notes = notes
 
     await log_action(db, current_user, AuditAction.UPDATE, "appointments", appointment_id,
                      details=f"Status changed to {new_status}")
+
+    await db.commit()
 
     return {"id": appt.id, "status": appt.status.value}

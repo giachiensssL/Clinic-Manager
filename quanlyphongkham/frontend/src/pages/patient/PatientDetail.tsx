@@ -7,9 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, User, Calendar, FileText, Pill, CreditCard, Edit, AlertTriangle, Loader2 } from 'lucide-react';
 import { patientsAPI, emrAPI, prescriptionsAPI, billingAPI } from '@/services/api';
 
+import { useAuthStore } from '@/store/authStore';
+
 export default function PatientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -73,7 +77,9 @@ export default function PatientDetail() {
             </div>
           </div>
         </div>
-        <Button className="bg-[#1e3a5f] hover:bg-[#152943]"><Edit className="mr-2 h-4 w-4" /> Sửa thông tin</Button>
+        {!isAdmin && (
+          <Button className="bg-[#1e3a5f] hover:bg-[#152943]"><Edit className="mr-2 h-4 w-4" /> Sửa thông tin</Button>
+        )}
       </div>
 
       {patient.allergies && (
@@ -102,10 +108,12 @@ export default function PatientDetail() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                 <div><p className="text-sm text-muted-foreground">Điện thoại</p><p className="font-medium">{patient.phone}</p></div>
                 <div><p className="text-sm text-muted-foreground">Email</p><p className="font-medium">{patient.email}</p></div>
-                <div><p className="text-sm text-muted-foreground">Địa chỉ</p><p className="font-medium">{patient.address}</p></div>
+                <div><p className="text-sm text-muted-foreground">CMND/CCCD</p><p className="font-medium">{patient.identity_number || 'Chưa cập nhật'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Nhóm máu</p><p className="font-medium text-red-600 font-bold">{patient.blood_type || 'Chưa cập nhật'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Địa chỉ</p><p className="font-medium">{patient.address || 'Chưa cập nhật'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Người liên hệ khẩn cấp</p><p className="font-medium">{patient.emergency_contact_name ? `${patient.emergency_contact_name} - ${patient.emergency_contact_phone}` : 'Chưa cập nhật'}</p></div>
                 <div><p className="text-sm text-muted-foreground">Số thẻ BHYT</p><p className="font-medium">{patient.insurance_number || 'Không có'}</p></div>
-                <div><p className="text-sm text-muted-foreground">Nhóm máu</p><p className="font-medium text-red-600 font-bold">{patient.blood_type}</p></div>
-                <div><p className="text-sm text-muted-foreground">Người liên hệ khẩn cấp</p><p className="font-medium">{patient.emergency_contact_name} - {patient.emergency_contact_phone}</p></div>
+                <div><p className="text-sm text-muted-foreground">Nơi ĐK KCB BĐ</p><p className="font-medium">{patient.insurance_provider || 'Không có'}</p></div>
               </div>
             </CardContent>
           </Card>

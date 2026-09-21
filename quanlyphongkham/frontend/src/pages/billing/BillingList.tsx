@@ -36,10 +36,14 @@ const STATUS_CONFIG = {
   refunded: { label: 'Hoàn tiền', color: 'bg-slate-100 text-slate-600', icon: CreditCard },
 };
 
+import { useAuthStore } from '@/store/authStore';
+
 const formatCurrency = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 const formatDate = (s: string) => new Date(s).toLocaleDateString('vi-VN');
 
 export default function BillingList() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Billing | null>(null);
@@ -186,7 +190,7 @@ export default function BillingList() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {(b.status === 'unpaid' || b.status === 'partially_paid') && (
+                          {(b.status === 'unpaid' || b.status === 'partially_paid') && !isAdmin && (
                             <Button
                               size="sm"
                               className="h-8"
@@ -230,7 +234,7 @@ export default function BillingList() {
               </div>
             </div>
           )}
-          {selected && (selected.status === 'unpaid' || selected.status === 'partially_paid') && (
+          {selected && (selected.status === 'unpaid' || selected.status === 'partially_paid') && !isAdmin && (
             <DialogFooter>
               <Button onClick={() => openPayDialog(selected)}>
                 <CreditCard className="w-4 h-4 mr-2" />

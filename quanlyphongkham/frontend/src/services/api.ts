@@ -41,6 +41,7 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (data: any) => api.post('/auth/login', data),
+  register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
 };
 
@@ -56,12 +57,13 @@ export const patientsAPI = {
 export const appointmentsAPI = {
   getAll: (params: any) => api.get('/appointments', { params }),
   create: (data: any) => api.post('/appointments', data),
-  updateStatus: (id: string, status: string) => api.put(`/appointments/${id}`, { status }),
+  updateStatus: (id: string, status: string, reason?: string) => api.patch(`/appointments/${id}/status`, null, { params: { new_status: status, cancellation_reason: reason } }),
 };
 
 export const doctorsAPI = {
   getAll: (params?: any) => api.get('/doctors', { params }),
   getById: (id: string) => api.get(`/doctors/${id}`),
+  getSlots: (id: string, date: string) => api.get(`/doctors/${id}/slots`, { params: { date } }),
 };
 
 export const emrAPI = {
@@ -89,8 +91,20 @@ export const billingAPI = {
 };
 
 export const aiAPI = {
-  chat: (data: { message: string; conversation_id?: string }) => api.post('/ai/chat', data),
+  chat: (data: { 
+    message: string; 
+    conversation_id?: string;
+    action_confirmed?: boolean;
+    pending_tool_call?: any;
+  }) => api.post('/ai/chat', data),
   summarize: (patientId: string) => api.post('/ai/summarize', { patient_id: patientId }),
+  
+  // Conversations
+  getConversations: () => api.get('/ai/conversations'),
+  getConversationDetail: (id: string) => api.get(`/ai/conversations/${id}`),
+  createConversation: (data?: { title: string }) => api.post('/ai/conversations', data || {}),
+  deleteConversation: (id: string) => api.delete(`/ai/conversations/${id}`),
+
   streamChat: async (message: string, conversationId?: string) => {
     const token = localStorage.getItem('access_token');
     const base = import.meta.env.VITE_API_URL || '';
@@ -120,6 +134,32 @@ export const adminAPI = {
   createUser: (data: any) => api.post('/admin/users', data),
   updateUserRole: (id: string, role: string) => api.put(`/admin/users/${id}/role`, { role }),
   toggleUserStatus: (id: string) => api.put(`/admin/users/${id}/status`),
+};
+
+export const notificationsAPI = {
+  list: (params?: any) => api.get('/notifications', { params }),
+  markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
+};
+
+export const labResultsAPI = {
+  list: (params?: any) => api.get('/lab-results', { params }),
+  getDetail: (id: string) => api.get(`/lab-results/${id}`),
+};
+
+export const doctorAPI = {
+  getMe: () => api.get('/doctor/me'),
+  getDashboardStats: () => api.get('/doctor/dashboard/stats'),
+  getTodayAppointments: () => api.get('/doctor/appointments/today'),
+  getRecentActivity: (limit = 10) => api.get('/doctor/dashboard/recent-activity', { params: { limit } }),
+  searchPatients: (q: string) => api.get('/doctor/patients/search', { params: { q } }),
+};
+
+export const receptionistAPI = {
+  getDashboardStats: () => api.get('/receptionist/dashboard/stats'),
+  getTodayAppointments: () => api.get('/receptionist/appointments/today'),
+  getWaitingPatients: () => api.get('/receptionist/patients/waiting'),
+  getRecentActivity: (limit = 10) => api.get('/receptionist/dashboard/recent-activity', { params: { limit } }),
 };
 
 export default api;
