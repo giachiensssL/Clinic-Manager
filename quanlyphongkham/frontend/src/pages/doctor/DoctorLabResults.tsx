@@ -177,7 +177,7 @@ export default function DoctorLabResults() {
             </div>
             
             <div className="p-6 overflow-y-auto max-h-[70vh]">
-              <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                 <div>
                   <p className="text-xs text-slate-500 mb-1">Bệnh nhân</p>
                   <p className="font-medium text-slate-800">{selectedLab.patient_name || '---'}</p>

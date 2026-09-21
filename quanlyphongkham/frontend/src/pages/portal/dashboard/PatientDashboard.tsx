@@ -75,7 +75,7 @@ export default function PatientDashboard() {
             </h1>
             <p className="text-[#64748B] mb-8">Chăm sóc sức khỏe của bạn là ưu tiên hàng đầu của chúng tôi.</p>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { icon: CalendarPlus, label: 'Đặt lịch khám', sub: 'Chọn bác sĩ, thời gian', path: '/portal/appointments/create', color: 'text-blue-500', bg: 'bg-blue-50' },
                 { icon: Calendar, label: 'Xem lịch hẹn', sub: 'Quản lý lịch khám', path: '/portal/appointments', color: 'text-teal-500', bg: 'bg-teal-50' },
@@ -207,7 +207,7 @@ export default function PatientDashboard() {
                   <h2 className="font-bold text-[#0B3B78]">Chỉ số sức khỏe</h2>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 flex flex-col items-center justify-center text-center">
                   <span className="text-xs text-[#64748B] mb-1">Chiều cao</span>
                   <span className="text-lg font-bold text-purple-700">{vitals?.height ? `${vitals.height} cm` : '--'}</span>

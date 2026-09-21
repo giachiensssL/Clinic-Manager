@@ -70,8 +70,8 @@ export default function DepartmentsManagement() {
             </div>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto w-full">
+      <Table className="w-full min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Mã khoa</TableHead>

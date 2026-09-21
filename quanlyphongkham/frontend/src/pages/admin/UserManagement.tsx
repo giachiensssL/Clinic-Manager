@@ -127,7 +127,7 @@ export default function UserManagement() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Tổng người dùng', value: roleCounts.total, color: 'text-slate-800' },
           { label: 'Đang hoạt động', value: roleCounts.active, color: 'text-green-600' },
@@ -176,8 +176,8 @@ export default function UserManagement() {
             </Select>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto w-full">
+      <Table className="w-full min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>

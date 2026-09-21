@@ -210,7 +210,7 @@ export default function Home() {
               </button>
             </div>
             {/* Feature pills */}
-            <div className="grid grid-cols-2 gap-3 max-w-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
               {[
                 { icon: Zap,        label: 'Triển khai nhanh' },
                 { icon: Lock,       label: 'Bảo mật cao' },
@@ -735,7 +735,7 @@ export default function Home() {
               AI Clinic hỗ trợ toàn bộ các loại hình dịch vụ y tế phổ biến tại phòng khám.
             </p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {SERVICES.map(s => {
               const Icon = s.icon;
               return (

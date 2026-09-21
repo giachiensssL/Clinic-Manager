@@ -197,7 +197,7 @@ export default function PrescriptionsList() {
  </DialogHeader>
  {selected && (
  <div className="space-y-4">
- <div className="grid grid-cols-2 gap-3 text-sm">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
  <div><span className="text-slate-500">Bệnh nhân:</span><br /><span className="font-medium">{selected.patient?.full_name}</span></div>
  <div><span className="text-slate-500">Bác sĩ:</span><br /><span className="font-medium">{selected.doctor?.staff?.full_name}</span></div>
  <div><span className="text-slate-500">Mã BN:</span><br /><span className="font-mono">{selected.patient?.patient_code}</span></div>

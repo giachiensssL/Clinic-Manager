@@ -91,7 +91,7 @@ export default function ReceptionistAppointmentCreate() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Ngày khám *</Label>
                 <Input type="date" min={new Date().toISOString().split('T')[0]} value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />

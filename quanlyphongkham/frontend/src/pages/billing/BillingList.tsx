@@ -219,7 +219,7 @@ export default function BillingList() {
           </DialogHeader>
           {selected && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><span className="text-slate-500">Bệnh nhân:</span><br /><span className="font-medium">{selected.patient?.full_name ?? 'N/A'}</span></div>
                 <div><span className="text-slate-500">Ngày tạo:</span><br /><span className="font-medium">{formatDate(selected.created_at)}</span></div>
               </div>

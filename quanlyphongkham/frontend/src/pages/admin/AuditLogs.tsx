@@ -62,7 +62,7 @@ export default function AuditLogs() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Tổng hôm nay', value: '247', color: 'text-slate-800' },
           { label: 'Thành công', value: '231', color: 'text-green-600' },
@@ -108,8 +108,8 @@ export default function AuditLogs() {
             </Select>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto w-full">
+      <Table className="w-full min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Thời gian</TableHead>

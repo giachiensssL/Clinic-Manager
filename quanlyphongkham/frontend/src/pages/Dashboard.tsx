@@ -256,17 +256,17 @@ export default function Dashboard() {
                 { name: 'Lê Quang Hùng', time: '09:30', wait: 'Chưa tới', reason: 'Tái khám', status: 'scheduled' },
                 { name: 'Phạm Thị Hoa', time: '10:00', wait: 'Chưa tới', reason: 'Sốt cao', status: 'scheduled' },
               ].map((p, i) => (
-                <div key={i} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50">
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-slate-50 gap-3">
                   <div>
                     <p className="font-medium">{p.name}</p>
                     <p className="text-sm text-muted-foreground">Lịch: {p.time} • {p.reason}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right flex items-center sm:block gap-2">
                     <Badge className={p.status === 'waiting' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}>
                       {p.status === 'waiting' ? `Chờ ${p.wait}` : 'Chưa tới'}
                     </Badge>
                     {p.status === 'waiting' && (
-                      <Button size="sm" className="mt-1 h-7 text-xs bg-[#0ea5e9] hover:bg-[#0284c7] ml-2">
+                      <Button size="sm" className="h-7 text-xs bg-[#0ea5e9] hover:bg-[#0284c7] sm:mt-1">
                         Gọi khám
                       </Button>
                     )}
@@ -304,7 +304,7 @@ export default function Dashboard() {
   // ── RECEPTIONIST DASHBOARD ──────────────────────────
   const renderReceptionistDashboard = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Hôm Nay', value: '24', sub: 'Tổng lịch hẹn', color: 'text-slate-800' },
           { label: 'Chờ Khám', value: '5', sub: 'Đang chờ được gọi', color: 'text-amber-600' },
@@ -331,12 +331,12 @@ export default function Dashboard() {
         <CardContent>
           <div className="space-y-2">
             {receptionWaitingList.map((p, i) => (
-              <div key={i} className={`flex items-center justify-between p-3 border rounded-lg ${
+              <div key={i} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg gap-3 ${
                 p.status === 'consultation' ? 'bg-purple-50 border-purple-200' :
                 p.status === 'waiting' ? 'bg-amber-50 border-amber-200' : 'hover:bg-slate-50'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold">
+                  <div className="w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold shrink-0">
                     {i + 1}
                   </div>
                   <div>
@@ -344,8 +344,8 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-500">{p.code} • {p.doctor} • {p.specialty}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex items-center gap-3 sm:ml-auto">
+                  <div className="text-right shrink-0">
                     <p className="text-sm font-bold text-[#1e3a5f]">{p.time}</p>
                     <p className="text-xs text-amber-600">{p.wait}</p>
                   </div>
@@ -370,7 +370,7 @@ export default function Dashboard() {
   // ── ACCOUNTANT DASHBOARD ──────────────────────────────
   const renderAccountantDashboard = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Doanh Thu Hôm Nay', value: '1.195M', sub: 'Tổng hóa đơn', color: 'text-blue-600' },
           { label: 'Đã Thu', value: '770K', sub: '2 hóa đơn đã thanh toán', color: 'text-green-600' },
@@ -415,12 +415,12 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-2">
               {accountantRecentInvoices.map(inv => (
-                <div key={inv.code} className="flex items-center justify-between p-2.5 border rounded-lg hover:bg-slate-50">
+                <div key={inv.code} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-slate-50 gap-3">
                   <div>
                     <p className="font-medium text-sm">{inv.code}</p>
                     <p className="text-xs text-slate-500">{inv.patient} • {inv.date}</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="font-bold text-sm">{inv.amount.toLocaleString()}đ</span>
                     <Badge
                       className={

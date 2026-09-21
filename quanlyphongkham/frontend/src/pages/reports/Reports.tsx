@@ -62,7 +62,7 @@ const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e'];
 function UserReport() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Tổng người dùng', value: '1,284', change: '+12.5%', up: true, icon: Users, color: 'text-blue-600' },
           { label: 'Người dùng mới (tháng)', value: '145', change: '+5.2%', up: true, icon: TrendingUp, color: 'text-green-600' },
@@ -127,7 +127,7 @@ function UserReport() {
 function ActivityReport() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Tổng lượt tương tác', value: '45,210', change: '+18.2%', up: true },
           { label: 'Thời gian trung bình/phiên', value: '14m 20s', change: '+1m', up: true },
@@ -187,7 +187,7 @@ function ActivityReport() {
 function OverviewReport() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Trạng thái máy chủ', value: 'Bình thường', text: 'text-green-600' },
           { label: 'Tải CPU trung bình', value: '45%', text: 'text-slate-800' },

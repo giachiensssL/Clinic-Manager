@@ -79,7 +79,7 @@ export default function SystemSettings() {
                   </div>
                   <Switch defaultChecked />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2"><label className="text-sm font-medium">Thời gian mỗi ca khám (phút)</label><Input type="number" defaultValue="15" /></div>
                   <div className="space-y-2"><label className="text-sm font-medium">Số ca tối đa / bác sĩ / ngày</label><Input type="number" defaultValue="40" /></div>
                 </div>

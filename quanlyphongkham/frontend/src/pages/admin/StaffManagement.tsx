@@ -78,7 +78,7 @@ export default function StaffManagement() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Tổng nhân viên</p><p className="text-2xl font-bold text-slate-800">{stats.total}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Bác sĩ</p><p className="text-2xl font-bold text-blue-600">{stats.doctors}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Lễ tân</p><p className="text-2xl font-bold text-green-600">{stats.reception}</p></CardContent></Card>
@@ -94,8 +94,8 @@ export default function StaffManagement() {
             </div>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto w-full">
+      <Table className="w-full min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Mã NV</TableHead>

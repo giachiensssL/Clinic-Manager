@@ -192,7 +192,7 @@ export default function Register() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700 ml-1">Họ và tên *</label>
                     <div className="relative">
@@ -248,7 +248,7 @@ export default function Register() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700 ml-1">Số điện thoại *</label>
                     <div className="relative">

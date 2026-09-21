@@ -103,7 +103,7 @@ export default function PatientHealthRecord() {
 
       {/* Vitals Summary Cards */}
       {latestVitals ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
             <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2">
               <Ruler className="w-5 h-5" />

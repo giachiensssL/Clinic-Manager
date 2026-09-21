@@ -83,11 +83,11 @@ export default function PatientsList() {
  <DialogContent className="max-h-[90vh] overflow-y-auto">
  <DialogHeader><DialogTitle>Thêm bệnh nhân mới</DialogTitle></DialogHeader>
  <form onSubmit={handleSubmit(d => createMutation.mutate(d))} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Họ Tên</Label><Input {...register('full_name', { required: true })} placeholder="Nguyễn Văn A" /></div>
           <div className="space-y-2"><Label>Số điện thoại</Label><Input {...register('phone')} placeholder="0901234567" /></div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Ngày sinh</Label><Input type="date" {...register('date_of_birth', { required: true })} /></div>
           <div className="space-y-2">
             <Label>Giới tính</Label>
@@ -101,20 +101,20 @@ export default function PatientsList() {
             </Select>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Email</Label><Input type="email" {...register('email')} placeholder="email@example.com" /></div>
           <div className="space-y-2"><Label>CMND/CCCD</Label><Input {...register('identity_number')} placeholder="012345678912" /></div>
         </div>
         <div className="space-y-2"><Label>Địa chỉ</Label><Input {...register('address')} placeholder="123 Đường ABC, Q.1, TP.HCM" /></div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Nhóm máu</Label><Input {...register('blood_type')} placeholder="O+" /></div>
           <div className="space-y-2"><Label>Dị ứng</Label><Input {...register('allergies')} placeholder="Phấn hoa, hải sản..." /></div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Số BHYT</Label><Input {...register('insurance_number')} placeholder="DN123456789" /></div>
           <div className="space-y-2"><Label>Nhà cung cấp BHYT</Label><Input {...register('insurance_provider')} placeholder="BHXH Việt Nam" /></div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Người liên hệ khẩn</Label><Input {...register('emergency_contact_name')} placeholder="Nguyễn Văn B" /></div>
           <div className="space-y-2"><Label>SĐT khẩn cấp</Label><Input {...register('emergency_contact_phone')} placeholder="0912345678" /></div>
         </div>
@@ -135,8 +135,8 @@ export default function PatientsList() {
         <Input placeholder="Tìm kiếm theo Tên, Mã BN, SĐT..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
     </div>
-    <div className="rounded-md border">
-      <Table>
+    <div className="rounded-md border overflow-x-auto w-full">
+      <Table className="w-full min-w-[800px]">
         <TableHeader>
           <TableRow>
             <TableHead>Mã BN</TableHead><TableHead>Họ Tên</TableHead><TableHead>Ngày Sinh</TableHead>
@@ -185,11 +185,11 @@ export default function PatientsList() {
   <DialogContent className="max-h-[90vh] overflow-y-auto">
     <DialogHeader><DialogTitle>Chỉnh sửa bệnh nhân</DialogTitle></DialogHeader>
     <form onSubmit={handleEditSubmit(d => updateMutation.mutate({ id: editPatient.id, data: d }))} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Họ Tên</Label><Input {...regEdit('full_name', { required: true })} /></div>
         <div className="space-y-2"><Label>Số điện thoại</Label><Input {...regEdit('phone')} /></div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Ngày sinh</Label><Input type="date" {...regEdit('date_of_birth')} /></div>
         <div className="space-y-2">
           <Label>Giới tính</Label>
@@ -201,20 +201,20 @@ export default function PatientsList() {
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Email</Label><Input type="email" {...regEdit('email')} /></div>
         <div className="space-y-2"><Label>CMND/CCCD</Label><Input {...regEdit('identity_number')} /></div>
       </div>
       <div className="space-y-2"><Label>Địa chỉ</Label><Input {...regEdit('address')} /></div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Nhóm máu</Label><Input {...regEdit('blood_type')} /></div>
         <div className="space-y-2"><Label>Dị ứng</Label><Input {...regEdit('allergies')} /></div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Số BHYT</Label><Input {...regEdit('insurance_number')} /></div>
         <div className="space-y-2"><Label>Nhà cung cấp BHYT</Label><Input {...regEdit('insurance_provider')} /></div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Người liên hệ khẩn</Label><Input {...regEdit('emergency_contact_name')} /></div>
         <div className="space-y-2"><Label>SĐT khẩn cấp</Label><Input {...regEdit('emergency_contact_phone')} /></div>
       </div>

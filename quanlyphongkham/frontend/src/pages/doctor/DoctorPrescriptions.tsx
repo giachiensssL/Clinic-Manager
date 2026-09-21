@@ -165,7 +165,7 @@ export default function DoctorPrescriptions() {
                       </div>
                       <p className="text-xs text-slate-500 mb-2">{item.generic_name}</p>
                       
-                      <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                         <div>
                           <span className="text-xs text-slate-500 block">Liều dùng:</span>
                           <span className="text-sm font-medium text-slate-700">{item.dosage}</span>

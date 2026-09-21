@@ -109,10 +109,19 @@ export default function AppLayout() {
 
   return (
     <div className="h-screen bg-slate-50 flex overflow-hidden font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900">
+      {/* Mobile Overlay Backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside className={cn(
-        "bg-white border-r border-slate-200 shadow-sm transition-all duration-300 ease-in-out flex flex-col z-20",
-        sidebarOpen ? "w-[240px]" : "w-16",
+        "bg-white border-r border-slate-200 shadow-sm transition-all duration-300 ease-in-out flex flex-col z-50",
+        "fixed md:relative inset-y-0 left-0 h-full",
+        sidebarOpen ? "w-[240px] translate-x-0" : "w-[240px] md:w-16 -translate-x-full md:translate-x-0",
         user?.role === 'admin' ? "bg-[#0b1b36] border-[#0b1b36] text-white" : ""
       )}>
         <div className={cn(
@@ -253,10 +262,16 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-4">
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-800">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden w-full">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 md:px-6 gap-4">
+          <div className="flex-1 flex items-center gap-2">
+            <button 
+              className="md:hidden text-slate-500 hover:text-slate-700"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-slate-800 line-clamp-1">
               {currentPage?.label || 'Clinic AI'}
             </h2>
           </div>
@@ -333,7 +348,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50 p-6" onClick={() => { setNotifOpen(false); setUserMenuOpen(false); }}>
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6" onClick={() => { setNotifOpen(false); setUserMenuOpen(false); }}>
           <Outlet />
         </div>
       </main>

@@ -484,7 +484,7 @@ export default function PatientPortal() {
                   <h2 className="font-bold text-gray-800 text-base">Tổng quan của bạn</h2>
                   <span className="text-xs text-gray-400">Cập nhật theo thời gian thực</span>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {[
                     { label: 'Lịch hẹn sắp tới', value: aptsLoading ? '—' : upcomingApts.length, icon: Calendar, color: '#0D6EFD', bg: '#EBF3FF', change: '+2 tuần này' },
                     { label: 'Tổng lần khám', value: emrLoading ? '—' : allEmr.length, icon: Stethoscope, color: '#10B981', bg: '#ECFDF5', change: 'Lần cuối hôm nay' },
@@ -668,7 +668,7 @@ export default function PatientPortal() {
                   <p className="text-xs text-[#0D6EFD] font-semibold uppercase tracking-wider mb-1">TÍNH NĂNG NỔI BẬT</p>
                   <h2 className="font-bold text-gray-800 text-base">Giải pháp toàn diện cho sức khỏe của bạn</h2>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   {SERVICES.map(s => {
                     const Icon = s.icon;
                     return (
@@ -697,7 +697,7 @@ export default function PatientPortal() {
                     {emrLoading ? (
                       <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
                     ) : latestEmr ? (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {[
                           { label: 'Cân nặng', value: latestEmr.weight ? `${latestEmr.weight} kg` : null, color: '#0D6EFD', bg: '#EBF3FF', icon: User },
                           { label: 'Chiều cao', value: latestEmr.height ? `${latestEmr.height} cm` : null, color: '#10B981', bg: '#ECFDF5', icon: User },
@@ -839,7 +839,7 @@ export default function PatientPortal() {
                 {/* Right: Services */}
                 <div className="lg:col-span-2 bg-white border border-l-0 border-gray-200 p-6">
                   <p className="font-semibold text-gray-800 text-sm mb-4">Các dịch vụ chính</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       { icon: Calendar, label: 'Khám tổng quát', color: '#0D6EFD', bg: '#EBF3FF' },
                       { icon: Stethoscope, label: 'Khám chuyên khoa', color: '#10B981', bg: '#ECFDF5' },

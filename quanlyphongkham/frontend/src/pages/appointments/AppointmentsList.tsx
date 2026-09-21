@@ -132,7 +132,7 @@ export default function AppointmentsList() {
  </SelectContent>
  </Select>
  </div>
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div className="space-y-2"><Label>Ngày khám</Label><Input type="date" min={new Date().toISOString().split('T')[0]} {...register('appointment_date', { required: true })} /></div>
  <div className="space-y-2"><Label>Giờ khám</Label><Input type="time" {...register('start_time', { required: true })} /></div>
  </div>

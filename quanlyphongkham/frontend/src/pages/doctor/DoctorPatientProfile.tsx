@@ -102,7 +102,7 @@ export default function DoctorPatientProfile() {
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
               <Activity className="w-4 h-4 text-blue-600" /> Thông tin y tế
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-50 p-3 rounded-lg">
                 <p className="text-xs text-slate-500 flex items-center gap-1 mb-1">
                   <Droplet className="w-3 h-3 text-red-500" /> Nhóm máu
