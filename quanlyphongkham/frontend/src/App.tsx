@@ -193,6 +193,9 @@ function App() {
           <Route path="admin/notifications" element={<ProtectedRoute roles={['admin']}><SystemNotifications /></ProtectedRoute>} />
           <Route path="admin/settings" element={<ProtectedRoute roles={['admin']}><SystemSettings /></ProtectedRoute>} />
         </Route>
+
+        {/* Catch-all route to redirect unknown paths to Home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
     </BrowserRouter>
