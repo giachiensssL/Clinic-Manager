@@ -171,28 +171,76 @@ export default function UnifiedAIChatSystem() {
     setLoading(true);
     
     try {
-      const { data } = await aiAPI.chat({
-        message: text,
-        conversation_id: activeId
+      const token = localStorage.getItem('access_token');
+      const base = import.meta.env.VITE_API_URL || '';
+      const params = new URLSearchParams({ message: text });
+      if (activeId) params.append('conversation_id', activeId);
+      
+      const response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
-      if (data.conversation_id && data.conversation_id !== activeId) {
-        setActiveId(data.conversation_id);
-        fetchConversations();
+      if (!response.ok) {
+        throw new Error('Network error');
       }
       
-      if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
-        setPendingTool(data.tool_call_details);
-      } else {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString() + 'ai',
-          role: 'assistant',
-          content: data.response,
-          created_at: new Date().toISOString()
-        }]);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder('utf-8');
+      if (!reader) throw new Error('No stream');
+
+      let assistantMsgId = Date.now().toString() + 'ai';
+      setMessages(prev => [...prev, {
+        id: assistantMsgId,
+        role: 'assistant',
+        content: '',
+        created_at: new Date().toISOString()
+      }]);
+
+      let done = false;
+      let fullText = '';
+      let isFirstChunk = true;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunkStr = decoder.decode(value, { stream: true });
+          const events = chunkStr.split('\n\n');
+          for (const ev of events) {
+            if (ev.startsWith('data: ')) {
+               try {
+                 const data = JSON.parse(ev.slice(6));
+                 
+                 if (data.conversation_id && isFirstChunk) {
+                   if (!activeId) {
+                     setActiveId(data.conversation_id);
+                     fetchConversations();
+                   }
+                   isFirstChunk = false;
+                 }
+                 
+                 if (data.chunk) {
+                    fullText += data.chunk;
+                    setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText } : m));
+                 }
+                 
+                 if (data.error) {
+                    setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText + `\nLỗi: ${data.error}`, isError: true } : m));
+                 }
+                 
+                 if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
+                    setPendingTool(data.tool_call_details);
+                 }
+               } catch (e) {
+                 // ignore parse error for incomplete chunks
+               }
+            }
+          }
+        }
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || err.message || 'Không thể xử lý yêu cầu lúc này.';
+      const errorMsg = err.message || 'Không thể xử lý yêu cầu lúc này.';
       setMessages(prev => [...prev, {
         id: Date.now().toString() + 'err',
         role: 'assistant',
@@ -380,6 +428,12 @@ export default function UnifiedAIChatSystem() {
                              Thử lại
                            </button>
                         </div>
+                      ) : msg.content === '' ? (
+                        <div className="flex items-center gap-1.5 h-5 px-1">
+                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                        </div>
                       ) : (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {msg.content}
@@ -397,7 +451,7 @@ export default function UnifiedAIChatSystem() {
                       <span className="text-[10px] text-slate-400 whitespace-nowrap">
                         {format(new Date(msg.created_at || new Date()), 'HH:mm')}
                       </span>
-                      {msg.role === 'assistant' && !msg.isError && (
+                      {msg.role === 'assistant' && !msg.isError && msg.content !== '' && (
                         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                            <button onClick={() => {navigator.clipboard.writeText(msg.content); toast.success('Đã sao chép');}} className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors" title="Copy">
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -409,7 +463,7 @@ export default function UnifiedAIChatSystem() {
                 </div>
               ))}
               
-              {loading && (
+              {loading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
                 <div className="flex w-full gap-4 justify-start">
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 mt-1 shadow-sm border border-blue-200">
                      <Bot className="w-4 h-4 text-blue-600" />

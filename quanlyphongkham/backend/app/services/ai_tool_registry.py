@@ -377,11 +377,18 @@ class AIToolRegistry:
 
     async def _handle_get_my_appointments(self, db: AsyncSession, user: User, args: dict) -> dict:
         """Handler lấy lịch hẹn cho Patient"""
+        from sqlalchemy.orm import selectinload
+        from app.models.models import Doctor
         pat = (await db.execute(select(Patient).where(Patient.user_id == user.id))).scalar_one_or_none()
         if not pat:
             return {"error": "Không tìm thấy hồ sơ bệnh nhân."}
             
-        stmt = select(Appointment).where(Appointment.patient_id == pat.id).order_by(Appointment.appointment_date.desc())
+        stmt = select(Appointment).options(
+            selectinload(Appointment.doctor).selectinload(Doctor.staff),
+            selectinload(Appointment.doctor).selectinload(Doctor.department),
+            selectinload(Appointment.specialty)
+        ).where(Appointment.patient_id == pat.id).order_by(Appointment.appointment_date.desc())
+        
         status = args.get("status")
         if status:
             try:
@@ -394,12 +401,21 @@ class AIToolRegistry:
         
         data = []
         for a in appointments[:5]: # Giới hạn 5 lịch gần nhất tránh vượt token
+            doc_name = a.doctor.staff.full_name if a.doctor and a.doctor.staff else "N/A"
+            doc_phone = a.doctor.staff.phone if a.doctor and a.doctor.staff else "N/A"
+            department_name = a.doctor.department.name if a.doctor and a.doctor.department else "N/A"
+            specialty_name = a.specialty.name if a.specialty else "N/A"
+            
             data.append({
                 "id": a.id,
                 "date": a.appointment_date.isoformat(),
                 "time": a.start_time.isoformat() if a.start_time else "",
                 "status": a.status.value,
-                "reason": a.reason or ""
+                "reason": a.reason or "",
+                "doctor": doc_name,
+                "phone": doc_phone,
+                "department": department_name,
+                "specialty": specialty_name
             })
         
         return {"appointments": data, "count": len(data), "message": "Thành công"}
@@ -585,13 +601,13 @@ class AIToolRegistry:
         }
 
     async def _handle_get_patient_summary(self, db: AsyncSession, user: User, args: dict) -> dict:
-        from app.models.models import Patient, Consultation, ConsultationDiagnosis, LabResult, Prescription
+        from app.models.models import Patient, Consultation, ConsultationDiagnosis, LabResult, Prescription, UserRole, Doctor, Staff, Appointment
         from sqlalchemy import or_
         from sqlalchemy.orm import selectinload
         
         query = args.get("patient_name_or_id", "")
         if not query:
-            return {"error": "Thiếu thông tin bệnh nhân"}
+            return {"error": "MISSING_INFO", "message": "Thiếu thông tin bệnh nhân"}
             
         # Tìm patient theo ID hoặc tên
         stmt = select(Patient).where(or_(
@@ -601,7 +617,31 @@ class AIToolRegistry:
         ))
         pat = (await db.execute(stmt)).scalars().first()
         if not pat:
-            return {"error": f"Không tìm thấy hồ sơ bệnh nhân nào khớp với '{query}'"}
+            return {"error": "NOT_FOUND", "message": f"Không tìm thấy hồ sơ bệnh nhân nào khớp với '{query}'"}
+            
+        # Kiểm tra quyền truy cập nếu là Bác sĩ
+        if user.role == UserRole.DOCTOR:
+            doc_stmt = select(Doctor).join(Staff).where(Staff.user_id == user.id)
+            doc = (await db.execute(doc_stmt)).scalars().first()
+            if not doc:
+                return {"error": "UNAUTHORIZED", "message": "Tài khoản bác sĩ chưa được liên kết đúng cách."}
+                
+            # Kiểm tra xem bệnh nhân có lịch hẹn hoặc hồ sơ khám với bác sĩ này không
+            has_appointment = (await db.execute(select(1).where(
+                Appointment.patient_id == pat.id,
+                Appointment.doctor_id == doc.id
+            ).limit(1))).scalar()
+            
+            has_consultation = (await db.execute(select(1).where(
+                Consultation.patient_id == pat.id,
+                Consultation.doctor_id == doc.id
+            ).limit(1))).scalar()
+            
+            is_auth = has_appointment or has_consultation
+            
+            if not is_auth:
+                return {"error": "UNAUTHORIZED", "message": f"Bạn không được quyền truy cập hồ sơ của bệnh nhân {pat.full_name} vì bệnh nhân này chưa từng khám hoặc đặt lịch với bạn."}
+
             
         # Lấy lịch sử khám gần nhất
         mr_stmt = select(Consultation).options(selectinload(Consultation.diagnoses).selectinload(ConsultationDiagnosis.diagnosis)).where(Consultation.patient_id == pat.id).order_by(Consultation.created_at.desc()).limit(2)

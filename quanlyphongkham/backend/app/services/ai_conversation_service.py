@@ -25,12 +25,12 @@ class AIConversationService:
         return result.scalar_one_or_none()
 
     async def get_conversation_messages(self, db: AsyncSession, conversation_id: str) -> List[AIMessage]:
-        """Lấy toàn bộ tin nhắn của một cuộc hội thoại"""
+        """Lấy toàn bộ tin nhắn của một cuộc hội thoại (limit 15)"""
         stmt = select(AIMessage).where(
             AIMessage.conversation_id == conversation_id
-        ).order_by(AIMessage.created_at.asc())
+        ).order_by(AIMessage.created_at.desc()).limit(15)
         result = await db.execute(stmt)
-        return result.scalars().all()
+        return list(reversed(result.scalars().all()))
 
     async def create_conversation(self, db: AsyncSession, user_id: str, title: str = "New Conversation") -> AIConversation:
         """Tạo cuộc hội thoại mới"""

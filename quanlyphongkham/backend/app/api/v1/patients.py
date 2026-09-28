@@ -127,34 +127,115 @@ async def get_patient(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Xem chi tiết bệnh nhân — RBAC check"""
-    # Bệnh nhân chỉ được xem thông tin của mình
+    """Xem chi tiết bệnh nhân — RBAC check & Medical Records"""
+    from app.models.models import Doctor, Staff, Appointment, Consultation, Prescription, PrescriptionItem, Specialty
+    from sqlalchemy.orm import selectinload
+    
+    # 1. Base Query
+    stmt = select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
+    
+    # 2. Authorization Check
     if current_user.role == UserRole.PATIENT:
-        result = await db.execute(
-            select(Patient).where(Patient.user_id == current_user.id)
-        )
-        patient = result.scalar_one_or_none()
-        if not patient or patient.id != patient_id:
-            raise HTTPException(status_code=403, detail="Bạn không có quyền xem thông tin này")
-    else:
-        result = await db.execute(
-            select(Patient)
-            .options(selectinload(Patient.appointments).selectinload(Appointment.doctor))
-            .where(Patient.id == patient_id, Patient.deleted_at.is_(None))
-        )
-        patient = result.scalar_one_or_none()
-
+        # Bệnh nhân chỉ được xem thông tin của mình
+        stmt = stmt.where(Patient.user_id == current_user.id)
+    elif current_user.role == UserRole.DOCTOR:
+        # Bác sĩ chỉ được xem bệnh nhân có lịch hẹn hoặc đã khám
+        doc_stmt = select(Doctor).join(Staff).where(Staff.user_id == current_user.id)
+        doc = (await db.execute(doc_stmt)).scalars().first()
+        if not doc:
+            raise HTTPException(status_code=403, detail="Tài khoản bác sĩ không hợp lệ")
+            
+        auth_check = select(1).where(or_(
+            Appointment.patient_id == patient_id,
+            Consultation.patient_id == patient_id
+        )).where(
+            or_(Appointment.doctor_id == doc.id, Consultation.doctor_id == doc.id)
+        ).limit(1)
+        is_auth = (await db.execute(auth_check)).scalar()
+        if not is_auth:
+            raise HTTPException(status_code=403, detail="Bạn không có quyền xem bệnh án của bệnh nhân này vì chưa từng khám hoặc đặt lịch.")
+            
+    # Lấy bệnh nhân
+    patient = (await db.execute(stmt)).scalar_one_or_none()
     if not patient:
-        raise HTTPException(status_code=404, detail="Không tìm thấy bệnh nhân")
-
+        raise HTTPException(status_code=404, detail="Không tìm thấy bệnh nhân hoặc bạn không có quyền truy cập")
+        
     await log_action(db, current_user, AuditAction.READ, "patients", patient_id)
+    
+    # Lấy các lịch sử khám gần đây (Consultations & Appointments)
+    recent_visits = []
+    current_medications = []
+    
+    if current_user.role in [UserRole.DOCTOR, UserRole.PATIENT, UserRole.ADMIN]:
+        # Lấy lịch sử khám
+        cons_stmt = select(Consultation).options(
+            selectinload(Consultation.doctor).selectinload(Doctor.staff),
+            selectinload(Consultation.appointment).selectinload(Appointment.specialty),
+            selectinload(Consultation.diagnoses)
+        ).where(Consultation.patient_id == patient_id).order_by(Consultation.created_at.desc()).limit(5)
+        consultations = (await db.execute(cons_stmt)).scalars().all()
+        
+        for c in consultations:
+            diag_str = ", ".join([d.notes or "Chẩn đoán" for d in c.diagnoses]) if c.diagnoses else c.chief_complaint
+            recent_visits.append({
+                "id": c.id,
+                "date": c.created_at.date(),
+                "department": c.appointment.specialty.name if c.appointment and c.appointment.specialty else "Đa khoa",
+                "doctor": c.doctor.staff.full_name if c.doctor and c.doctor.staff else "Unknown",
+                "reason": c.chief_complaint,
+                "diagnosis": diag_str,
+                "treatment": c.treatment_plan,
+                "notes": c.clinical_notes
+            })
+            
+        # Lấy thuốc đang sử dụng (từ đơn thuốc gần nhất trong vòng 30 ngày)
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        rx_stmt = select(PrescriptionItem).join(Prescription).where(
+            Prescription.patient_id == patient_id,
+            Prescription.created_at >= thirty_days_ago
+        ).options(selectinload(PrescriptionItem.medicine))
+        rx_items = (await db.execute(rx_stmt)).scalars().all()
+        
+        for rx in rx_items:
+            current_medications.append({
+                "id": rx.id,
+                "medicine_name": rx.medicine.name if rx.medicine else "Unknown",
+                "dosage": rx.dosage,
+                "frequency": rx.frequency,
+                "instructions": rx.instructions
+            })
 
-    # Mask sensitive PII for Receptionist role
-    response = PatientDetail.model_validate(patient)
+    # Prepare response dict
+    response_dict = {
+        "id": patient.id,
+        "patient_code": patient.patient_code,
+        "full_name": patient.full_name,
+        "date_of_birth": patient.date_of_birth,
+        "gender": patient.gender,
+        "phone": patient.phone,
+        "email": patient.email,
+        "is_active": patient.is_active,
+        "created_at": patient.created_at,
+        "address": patient.address,
+        "identity_number": patient.identity_number,
+        "blood_type": patient.blood_type,
+        "allergies": patient.allergies,
+        "medical_history": patient.medical_history,
+        "insurance_number": patient.insurance_number,
+        "insurance_provider": patient.insurance_provider,
+        "emergency_contact_name": patient.emergency_contact_name,
+        "emergency_contact_phone": patient.emergency_contact_phone,
+        "updated_at": patient.updated_at,
+        "recent_visits": recent_visits,
+        "current_medications": current_medications
+    }
+
     if current_user.role == UserRole.RECEPTIONIST:
-        response.identity_number = "***MASKED***" if response.identity_number else None
+        response_dict["identity_number"] = "***MASKED***" if response_dict.get("identity_number") else None
+        
+    return response_dict
 
-    return response
 
 
 @router.put("/{patient_id}", response_model=PatientResponse)

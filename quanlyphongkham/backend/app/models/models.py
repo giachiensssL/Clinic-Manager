@@ -235,6 +235,7 @@ class Patient(Base):
     identity_number: Mapped[Optional[str]] = mapped_column(String(20))
     blood_type: Mapped[Optional[str]] = mapped_column(String(10))
     allergies: Mapped[Optional[str]] = mapped_column(Text)  # JSON list of allergies
+    medical_history: Mapped[Optional[str]] = mapped_column(Text)
     insurance_number: Mapped[Optional[str]] = mapped_column(String(50))
     insurance_provider: Mapped[Optional[str]] = mapped_column(String(255))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))

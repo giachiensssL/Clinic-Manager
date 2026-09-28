@@ -91,3 +91,25 @@ async def chat(
         action_confirmed=payload.action_confirmed
     )
     return AIChatResponse(**result)
+
+@router.get("/chat/stream")
+async def chat_stream(
+    message: str,
+    conversation_id: str = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Chat với AI Assistant (Streaming mode SSE)
+    """
+    import json
+    from fastapi.responses import StreamingResponse
+    
+    async def event_generator():
+        try:
+            async for chunk in ai_core_service.process_chat_stream(db, current_user, message, conversation_id):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

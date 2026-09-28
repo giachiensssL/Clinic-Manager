@@ -56,17 +56,41 @@ class PatientResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RecentVisitSchema(BaseModel):
+    id: str
+    date: date
+    department: str
+    doctor: str
+    reason: Optional[str] = None
+    diagnosis: Optional[str] = None
+    treatment: Optional[str] = None
+    notes: Optional[str] = None
+    
+    model_config = {"from_attributes": True}
+
+class CurrentMedicationSchema(BaseModel):
+    id: str
+    medicine_name: str
+    dosage: str
+    frequency: str
+    instructions: Optional[str] = None
+    
+    model_config = {"from_attributes": True}
+
 class PatientDetail(PatientResponse):
     """Thong tin benh nhan day du — dung khi xem chi tiet"""
     address: Optional[str] = None
     identity_number: Optional[str] = None
     blood_type: Optional[str] = None
     allergies: Optional[str] = None
+    medical_history: Optional[str] = None
     insurance_number: Optional[str] = None
     insurance_provider: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     updated_at: datetime
+    recent_visits: List[RecentVisitSchema] = []
+    current_medications: List[CurrentMedicationSchema] = []
 
 
 class PatientListResponse(BaseModel):

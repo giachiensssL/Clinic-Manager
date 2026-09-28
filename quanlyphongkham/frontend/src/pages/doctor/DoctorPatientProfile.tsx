@@ -61,105 +61,100 @@ export default function DoctorPatientProfile() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Cột trái: Thông tin cá nhân */}
-        <div className="md:col-span-1 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col items-center text-center">
-            <div className="w-24 h-24 rounded-full bg-slate-100 border-4 border-white shadow-md overflow-hidden mb-4">
-              {patient.avatar_url ? (
-                <img src={patient.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-slate-400">
-                  {patient.full_name?.charAt(0)}
-                </div>
-              )}
-            </div>
-            <h2 className="text-xl font-bold text-slate-800 mb-1">{patient.full_name}</h2>
-            <p className="text-sm text-slate-500 mb-4">
-              {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'} 
-              {patient.date_of_birth && ` • ${new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()} tuổi`}
-            </p>
-            
-            <div className="w-full space-y-3 mt-4 border-t border-slate-100 pt-4 text-left">
-              <div className="flex items-center gap-3 text-sm">
-                <Phone className="w-4 h-4 text-slate-400" />
-                <span className="text-slate-700">{patient.phone || 'Chưa cập nhật'}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <Mail className="w-4 h-4 text-slate-400" />
-                <span className="text-slate-700">{patient.email || 'Chưa cập nhật'}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <Calendar className="w-4 h-4 text-slate-400" />
-                <span className="text-slate-700">
-                  {patient.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-600" /> Thông tin y tế
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <p className="text-xs text-slate-500 flex items-center gap-1 mb-1">
-                  <Droplet className="w-3 h-3 text-red-500" /> Nhóm máu
-                </p>
-                <p className="font-semibold text-slate-800">{patient.blood_type || '---'}</p>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <p className="text-xs text-slate-500 flex items-center gap-1 mb-1">
-                  Cân nặng
-                </p>
-                <p className="font-semibold text-slate-800">--- kg</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Tiền sử dị ứng</p>
-              <p className="text-sm font-medium text-slate-800">{patient.allergies || 'Không ghi nhận dị ứng'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Tiền sử bệnh</p>
-              <p className="text-sm font-medium text-slate-800">{patient.medical_history || 'Không có dữ liệu'}</p>
-            </div>
-          </div>
+      {/* THÔNG TIN HÀNH CHÍNH */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">THÔNG TIN HÀNH CHÍNH</h3>
         </div>
-
-        {/* Cột phải: Lịch sử khám bệnh */}
-        <div className="md:col-span-2 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="border-b border-slate-100 p-1 flex">
-              <button className="flex-1 py-2.5 text-sm font-medium bg-slate-50 text-blue-600 rounded-lg">
-                Lịch sử khám (EMR)
-              </button>
-              <button className="flex-1 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
-                Kết quả xét nghiệm
-              </button>
-              <button className="flex-1 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
-                Đơn thuốc
-              </button>
+        <div className="p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-slate-500 mb-1">Họ tên</p>
+              <p className="font-semibold text-slate-800">{patient.full_name}</p>
             </div>
-            
-            <div className="p-6">
-              <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <FileText className="w-12 h-12 text-slate-300 mb-3" />
-                <p>Chưa có dữ liệu lịch sử khám bệnh</p>
-                <button 
-                  onClick={() => {
-                    toast('Vui lòng chọn ca khám của bệnh nhân từ danh sách lịch hẹn để tạo bệnh án', { icon: 'ℹ️' });
-                    navigate(`/doctor/appointments`);
-                  }}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
-                  Khám bệnh
-                </button>
-              </div>
+            <div>
+              <p className="text-sm text-slate-500 mb-1">Tuổi / Giới tính</p>
+              <p className="font-semibold text-slate-800">
+                {patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : '---'} / {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* TIỀN SỬ BỆNH */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">TIỀN SỬ BỆNH</h3>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="flex gap-2">
+            <span className="text-slate-400">•</span>
+            <p className="text-slate-800">{patient.medical_history || 'Không có dữ liệu tiền sử bệnh.'}</p>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-slate-400">•</span>
+            <p className="text-slate-800">Dị ứng: {patient.allergies || 'Không ghi nhận'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* LỊCH SỬ KHÁM GẦN ĐÂY */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">LỊCH SỬ KHÁM GẦN ĐÂY</h3>
+        </div>
+        <div className="p-5">
+          {(!patient.recent_visits || patient.recent_visits.length === 0) ? (
+            <p className="text-slate-500 italic">Không có dữ liệu lịch sử khám.</p>
+          ) : (
+            <div className="space-y-6">
+              {patient.recent_visits.map((visit: any) => (
+                <div key={visit.id} className="border-l-2 border-blue-500 pl-4 py-1">
+                  <p className="text-sm font-semibold text-blue-600 mb-1">
+                    {new Date(visit.date).toLocaleDateString('vi-VN')}
+                  </p>
+                  <p className="font-medium text-slate-800">{visit.department} (Bs. {visit.doctor})</p>
+                  <p className="text-slate-600 mt-1">{visit.diagnosis || visit.reason || 'Không có chẩn đoán'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* THUỐC ĐANG SỬ DỤNG */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">THUỐC ĐANG SỬ DỤNG</h3>
+        </div>
+        <div className="p-5">
+          {(!patient.current_medications || patient.current_medications.length === 0) ? (
+            <p className="text-slate-500 italic">Không có dữ liệu thuốc.</p>
+          ) : (
+            <div className="space-y-4">
+              {patient.current_medications.map((med: any) => (
+                <div key={med.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="font-semibold text-slate-800">{med.medicine_name} {med.dosage}</p>
+                  <p className="text-sm text-slate-600 mt-1">{med.frequency} {med.instructions ? `(${med.instructions})` : ''}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* GHI CHÚ */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">GHI CHÚ</h3>
+        </div>
+        <div className="p-5">
+          <p className="text-slate-800">Không có thông tin bổ sung.</p>
+        </div>
+      </div>
+
     </div>
   );
 }
+
