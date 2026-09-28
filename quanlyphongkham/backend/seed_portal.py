@@ -84,7 +84,7 @@ def run_seed():
 
         print("5. Seed Patients")
         # Current Patient (Nguyễn Văn An)
-        user_row = db.execute(text("SELECT id FROM users WHERE username='patient' OR username='dtc245200433@ictu.edu.vn'")).fetchone()
+        user_row = db.execute(text("SELECT id FROM users WHERE username='patient' OR username='minh.doan@ictu.edu.vn'")).fetchone()
         if not user_row:
             patient_user_id = str(uuid.uuid4())
             pw = hash_password("password123")

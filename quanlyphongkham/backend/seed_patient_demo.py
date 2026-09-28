@@ -22,7 +22,7 @@ async def seed_demo():
     print("Bắt đầu Seed Dữ liệu Patient Demo...")
     async with AsyncSessionLocal() as db:
         # 1. Tìm hoặc tạo User Patient
-        user_result = await db.execute(select(User).where(User.username == "dtc245200433@ictu.edu.vn"))
+        user_result = await db.execute(select(User).where(User.username == "minh.doan@ictu.edu.vn"))
         patient_user = user_result.scalar_one_or_none()
         if not patient_user:
             patient_user = User(

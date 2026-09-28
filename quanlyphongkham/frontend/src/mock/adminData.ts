@@ -28,7 +28,7 @@ export const mockUsers = Array.from({ length: 25 }).map((_, i) => {
   
   return {
     id: `USR${1000 + i}`,
-    name: ['Giàng A Chỉnh', 'Nguyễn Văn An', 'Trần Thị Mai', 'Lê Văn Nam', 'Phạm Thị Hoa', 'Hoàng Thi Thu', 'Đặng Văn Cường', 'Vũ Thị Lý'][i % 8] + (i > 7 ? ` ${i}` : ''),
+    name: ['Minh Đoàn', 'Nguyễn Văn An', 'Trần Thị Mai', 'Lê Văn Nam', 'Phạm Thị Hoa', 'Hoàng Thi Thu', 'Đặng Văn Cường', 'Vũ Thị Lý'][i % 8] + (i > 7 ? ` ${i}` : ''),
     email: `user${i}@aiclinic.com`,
     phone: `090${Math.floor(Math.random() * 10000000).toString().padStart(7, '0')}`,
     role: role,
@@ -107,7 +107,7 @@ export const mockSystemNotifications = [
 ];
 
 export const mockAuditLogs = Array.from({ length: 30 }).map((_, i) => {
-  const users = ['Giàng A Chiến', 'Lê Thị Hương', 'Trần Văn B', 'Admin', 'Nguyễn Văn A'];
+  const users = ['Minh Đoàn', 'Lê Thị Hương', 'Trần Văn B', 'Admin', 'Nguyễn Văn A'];
   const modules = ['Auth', 'System', 'User', 'Schedule', 'Report'];
   const actions = ['Đăng nhập', 'Cập nhật', 'Thêm mới', 'Xóa', 'Đổi mật khẩu', 'Xuất báo cáo'];
   
