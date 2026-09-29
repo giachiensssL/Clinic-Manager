@@ -109,23 +109,39 @@ export default function UnifiedAIChatSystem() {
   const [pendingTool, setPendingTool] = useState<any>(null);
   
   const [input, setInput] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const isStreamingRef = useRef(false);  // track streaming để chỉ auto-scroll khi cần
+  const isInitialLoadRef = useRef(true); // tránh auto-scroll khi mới load
+
+  // Scroll xuống cuối — chỉ gọi khi cần
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+  };
 
   useEffect(() => {
     fetchConversations();
   }, []);
 
+  // Auto-scroll khi streaming (chunk mới tới)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    if (isStreamingRef.current) {
+      scrollToBottom('auto');
+    }
+  }, [messages]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (selectFirstIfEmpty = true) => {
     try {
       const { data } = await aiAPI.getConversations();
       setConversations(data);
-      if (data.length > 0 && !activeId) {
+      if (selectFirstIfEmpty && data.length > 0 && !activeId) {
         loadConversation(data[0].id);
-      } else if (data.length === 0) {
+      } else if (selectFirstIfEmpty && data.length === 0) {
         handleNewChat();
       }
     } catch (err) {
@@ -135,10 +151,13 @@ export default function UnifiedAIChatSystem() {
 
   const loadConversation = async (id: string) => {
     try {
+      isInitialLoadRef.current = true;
       setActiveId(id);
       setMessages([]);
       const { data } = await aiAPI.getConversationDetail(id);
       setMessages(data.messages || []);
+      // Sau khi load xong history thì scroll xuống cuối (không animation)
+      setTimeout(() => scrollToBottom('instant'), 50);
     } catch (err) {
       toast.error('Không thể tải hội thoại');
     }
@@ -169,6 +188,9 @@ export default function UnifiedAIChatSystem() {
     const tempMsg = { id: Date.now().toString(), role: 'user', content: text, created_at: new Date().toISOString() };
     setMessages(prev => [...prev, tempMsg]);
     setLoading(true);
+    isStreamingRef.current = true;
+    // Scroll xuống ngay khi gửi tin nhắn user
+    setTimeout(() => scrollToBottom('smooth'), 30);
     
     try {
       const token = localStorage.getItem('access_token');
@@ -176,20 +198,60 @@ export default function UnifiedAIChatSystem() {
       const params = new URLSearchParams({ message: text });
       if (activeId) params.append('conversation_id', activeId);
       
-      const response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
+      let response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
-      if (!response.ok) {
-        throw new Error('Network error');
+
+      // Nếu token hết hạn → thử refresh rồi gọi lại
+      if (response.status === 401) {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          try {
+            const refreshRes = await fetch(`${base}/api/v1/auth/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh_token: refreshToken })
+            });
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              localStorage.setItem('access_token', refreshData.access_token);
+              localStorage.setItem('refresh_token', refreshData.refresh_token);
+              // Retry với token mới
+              response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${refreshData.access_token}` }
+              });
+            } else {
+              localStorage.clear();
+              window.location.href = '/login';
+              return;
+            }
+          } catch {
+            localStorage.clear();
+            window.location.href = '/login';
+            return;
+          }
+        } else {
+          localStorage.clear();
+          window.location.href = '/login';
+          return;
+        }
       }
-      
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Lỗi máy chủ (${response.status})${errText ? ': ' + errText.slice(0, 100) : ''}`);
+      }
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder('utf-8');
       if (!reader) throw new Error('No stream');
 
-      let assistantMsgId = Date.now().toString() + 'ai';
+      const assistantMsgId = Date.now().toString() + 'ai';
+      let conversationIdSet = false;
+      let currentActiveId = activeId;
+
       setMessages(prev => [...prev, {
         id: assistantMsgId,
         role: 'assistant',
@@ -199,7 +261,6 @@ export default function UnifiedAIChatSystem() {
 
       let done = false;
       let fullText = '';
-      let isFirstChunk = true;
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
@@ -212,12 +273,17 @@ export default function UnifiedAIChatSystem() {
                try {
                  const data = JSON.parse(ev.slice(6));
                  
-                 if (data.conversation_id && isFirstChunk) {
+                 // Nhận conversation_id lần đầu → cập nhật sidebar không làm reload
+                 if (data.conversation_id && !conversationIdSet) {
+                   conversationIdSet = true;
+                   currentActiveId = data.conversation_id;
                    if (!activeId) {
                      setActiveId(data.conversation_id);
-                     fetchConversations();
+                     // Chỉ refresh list sidebar, không load lại conversation
+                     aiAPI.getConversations().then(res => {
+                       setConversations(res.data);
+                     }).catch(() => {});
                    }
-                   isFirstChunk = false;
                  }
                  
                  if (data.chunk) {
@@ -226,7 +292,10 @@ export default function UnifiedAIChatSystem() {
                  }
                  
                  if (data.error) {
-                    setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText + `\nLỗi: ${data.error}`, isError: true } : m));
+                    setMessages(prev => prev.map(m => m.id === assistantMsgId
+                      ? { ...m, content: data.error, isError: true }
+                      : m
+                    ));
                  }
                  
                  if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
@@ -239,16 +308,20 @@ export default function UnifiedAIChatSystem() {
           }
         }
       }
+      // Streaming xong, scroll một lần cuối
+      scrollToBottom('smooth');
     } catch (err: any) {
       const errorMsg = err.message || 'Không thể xử lý yêu cầu lúc này.';
       setMessages(prev => [...prev, {
         id: Date.now().toString() + 'err',
         role: 'assistant',
-        content: `Đã xảy ra lỗi: ${errorMsg}`,
+        content: errorMsg,
         isError: true,
         created_at: new Date().toISOString()
       }]);
+      scrollToBottom('smooth');
     } finally {
+      isStreamingRef.current = false;
       setLoading(false);
     }
   };
@@ -378,7 +451,7 @@ export default function UnifiedAIChatSystem() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#FAFAFA]">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#FAFAFA]">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center max-w-lg mx-auto">
               <div className="w-20 h-20 bg-white rounded-3xl shadow-sm border border-slate-100 flex items-center justify-center mb-6">

@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"  # openai | gemini | claude | ollama
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEYS: str = ""  # Comma-separated list of keys for rotation
     CLAUDE_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 

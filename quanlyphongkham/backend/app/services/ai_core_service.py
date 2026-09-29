@@ -2,6 +2,7 @@ import google.generativeai as genai
 from google.generativeai.types import FunctionDeclaration, Tool
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
+from app.core.gemini_key_manager import gemini_key_manager
 from app.models.models import User
 from app.services.ai_context_service import ai_context_service
 from app.services.ai_tool_registry import ai_tool_registry
@@ -24,7 +25,7 @@ def _handle_gemini_error(e: Exception) -> str:
 
 class AICoreService:
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
+        gemini_key_manager.configure_genai()
 
     async def process_chat(self, db: AsyncSession, user: User, message: str, conversation_id: Optional[str] = None, pending_tool_call: dict = None, action_confirmed: bool = False):
         # 1. Quản lý Conversation
@@ -67,7 +68,7 @@ class AICoreService:
             self._rules_time = __import__('time').time()
             
         input_guard = InputGuardrail(self._cached_rules)
-        input_result = input_guard.check(message)
+        input_result = input_guard.check(message, user_role=user.role.value)
         
         safe_message = message
         if input_result.is_blocked:
@@ -90,7 +91,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-flash-lite-latest",
+            model_name="gemini-2.5-flash",
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -115,16 +116,37 @@ class AICoreService:
             
         chat = model.start_chat(history=gemini_history)
         
-        # 6. Gửi request
+        # 6. Gửi request — tự động rotate key nếu gặp quota error
         try:
             import asyncio
-            response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=60.0)
+            for _attempt in range(len(gemini_key_manager._keys)):
+                try:
+                    gemini_key_manager.configure_genai()
+                    response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=60.0)
+                    break
+                except Exception as _e:
+                    if gemini_key_manager._is_quota_error(_e):
+                        new_key = gemini_key_manager.rotate()
+                        if new_key is None:
+                            raise
+                        # Re-build model và chat với key mới
+                        gemini_key_manager.configure_genai()
+                        model = genai.GenerativeModel(
+                            model_name="gemini-2.5-flash",
+                            system_instruction=system_prompt,
+                            tools=tools if tools else None
+                        )
+                        chat = model.start_chat(history=gemini_history)
+                        await asyncio.sleep(1)
+                    else:
+                        raise
         except Exception as e:
             import traceback
             traceback.print_exc()
             error_msg = _handle_gemini_error(e)
             await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
             return {"conversation_id": conversation_id, "response": error_msg}
+
             
         # 7. Check Function Calling Loop
         max_turns = 5
@@ -204,7 +226,7 @@ class AICoreService:
 
         # 8.5 Kiểm tra output bằng guardrail
         output_guard = OutputGuardrail()
-        out_res = output_guard.check(final_text)
+        out_res = output_guard.check(final_text, user_role=user.role.value)
         if out_res.is_blocked:
             final_text = "Xin lỗi, tôi phát hiện thông tin chi tiết liên quan đến y khoa hoặc chẩn đoán không được phép hiển thị tự động. Vui lòng liên hệ trực tiếp bác sĩ để được tư vấn thêm."
                 
@@ -240,7 +262,7 @@ class AICoreService:
             self._rules_time = __import__('time').time()
             
         input_guard = InputGuardrail(self._cached_rules)
-        input_result = input_guard.check(message)
+        input_result = input_guard.check(message, user_role=user.role.value)
         
         safe_message = message
         if input_result.is_blocked:
@@ -261,7 +283,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-flash-lite-latest",
+            model_name="gemini-2.5-flash",
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -285,13 +307,55 @@ class AICoreService:
 
         try:
             import asyncio
-            response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=60.0)
+
+            # Hàm helper để gửi request có rotation
+            async def _send_with_rotation(chat_obj, model_factory):
+                for _attempt in range(len(gemini_key_manager._keys)):
+                    try:
+                        gemini_key_manager.configure_genai()
+                        return await asyncio.wait_for(
+                            chat_obj.send_message_async(safe_message, stream=True),
+                            timeout=60.0
+                        )
+                    except Exception as _e:
+                        if gemini_key_manager._is_quota_error(_e):
+                            new_key = gemini_key_manager.rotate()
+                            if new_key is None:
+                                raise
+                            gemini_key_manager.configure_genai()
+                            chat_obj = model_factory().start_chat(history=gemini_history)
+                            await asyncio.sleep(1)
+                        else:
+                            raise
+                raise RuntimeError("Tất cả API key đã hết quota.")
+
+            def make_model():
+                return genai.GenerativeModel(
+                    model_name="gemini-2.5-flash",
+                    system_instruction=system_prompt,
+                    tools=tools if tools else None
+                )
+
+            response_generator = await _send_with_rotation(chat, make_model)
             
-            # Xử lý function calling
             turn_count = 0
+            final_text = ""
+            
             while turn_count < 5:
                 turn_count += 1
-                func_calls = [part.function_call for part in response.parts if part.function_call]
+                func_calls = []
+                
+                async for chunk in response_generator:
+                    try:
+                        for part in chunk.parts:
+                            if part.function_call:
+                                func_calls.append(part.function_call)
+                            elif part.text:
+                                final_text += part.text
+                                yield {"chunk": part.text}
+                    except ValueError:
+                        pass
+                
                 if not func_calls:
                     break
                     
@@ -308,23 +372,17 @@ class AICoreService:
                     return
                     
                 tool_result = await ai_tool_registry.execute_tool(db, user, func_name, args, action_confirmed=False)
-                import asyncio
-                response = await asyncio.wait_for(chat.send_message_async({"function_response": {"name": func_name, "response": tool_result}}), timeout=60.0)
-
-            final_text = response.text or ""
-            
-            # Guardrail output
-            out_res = OutputGuardrail().check(final_text)
-            if out_res.is_blocked:
-                final_text = "Xin lỗi, tôi không thể hiển thị thông tin này."
                 
-            # Stream the final text in chunks to simulate streaming if it didn't use native streaming
-            # To actually stream from Gemini, we need send_message_stream_async but it conflicts with function calling logic easily.
-            # So we chunk the final_text
-            chunk_size = 20
-            for i in range(0, len(final_text), chunk_size):
-                yield {"chunk": final_text[i:i+chunk_size]}
-                await __import__('asyncio').sleep(0.02)
+                response_generator = await asyncio.wait_for(
+                    chat.send_message_async({"function_response": {"name": func_name, "response": tool_result}}, stream=True), 
+                    timeout=60.0
+                )
+                
+            out_res = OutputGuardrail().check(final_text, user_role=user.role.value)
+            if out_res.is_blocked:
+                warning = "\n\n[Hệ thống: Thông tin trên có thể chứa nội dung nhạy cảm. Vui lòng tham khảo ý kiến bác sĩ.]"
+                yield {"chunk": warning}
+                final_text += warning
                 
             await ai_conversation_service.add_message(db, conversation_id, "assistant", final_text)
             yield {"status": "done"}

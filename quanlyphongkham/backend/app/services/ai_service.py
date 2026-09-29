@@ -11,6 +11,7 @@ from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.gemini_key_manager import gemini_key_manager
 from app.ai.guardrails.guardrails import (
     InputGuardrail, OutputGuardrail, load_guardrail_rules,
     BLOCKED_RESPONSE, SCOPE_EXCEEDED_RESPONSE
@@ -303,7 +304,7 @@ class AIService:
             import google.generativeai as genai
             from sqlalchemy import select
             
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            gemini_key_manager.configure_genai()
             
             from app.ai.tools.appointment_tools import check_availability, book_appointment
             
@@ -352,7 +353,7 @@ class AIService:
             )
 
             model = genai.GenerativeModel(
-                model_name="gemini-flash-lite-latest",
+                model_name="gemini-2.5-flash",
                 system_instruction=system_instruction,
                 tools=tools
             )
@@ -418,7 +419,7 @@ class AIService:
         """Gọi Gemini AI với system prompt hành chính phòng khám"""
         try:
             import google.generativeai as genai
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            gemini_key_manager.configure_genai()
 
             system_instruction = (
                 "Bạn là trợ lý AI hành chính của Phòng khám Clinic AI. "
@@ -438,7 +439,7 @@ class AIService:
             )
 
             model = genai.GenerativeModel(
-                model_name="gemini-flash-lite-latest",
+                model_name="gemini-2.5-flash",
                 system_instruction=system_instruction
             )
             response = await asyncio.to_thread(model.generate_content, message)
