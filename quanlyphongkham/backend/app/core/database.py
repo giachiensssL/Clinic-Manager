@@ -27,7 +27,15 @@ engine_kwargs = {
     "echo": settings.DEBUG,
     "pool_pre_ping": True,
 }
-if "sqlite" not in settings.DATABASE_URL:
+if "sqlite" in settings.DATABASE_URL:
+    # SQLite: dùng WAL mode + busy_timeout để tránh "database is locked"
+    engine_kwargs["connect_args"] = {
+        "timeout": 30,           # Chờ tối đa 30s nếu DB bị lock
+        "check_same_thread": False,
+    }
+    engine_kwargs["pool_size"] = 1      # SQLite chỉ nên 1 writer
+    engine_kwargs["max_overflow"] = 0
+else:
     engine_kwargs["pool_size"] = 10
     engine_kwargs["max_overflow"] = 20
 
@@ -36,6 +44,18 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     **engine_kwargs
 )
+
+# Bật WAL mode cho SQLite sau khi engine khởi tạo
+if "sqlite" in settings.DATABASE_URL:
+    from sqlalchemy import event, text
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")   # Write-Ahead Logging — cho phép đọc đồng thời
+        cursor.execute("PRAGMA busy_timeout=30000")  # 30s timeout thay vì fail ngay
+        cursor.execute("PRAGMA synchronous=NORMAL")  # Cân bằng tốc độ/an toàn
+        cursor.close()
 
 
 # Session factory

@@ -143,7 +143,7 @@ class AIService:
         output_guard = OutputGuardrail()
 
         # 2. Input Guardrail check
-        input_result = input_guard.check(message)
+        input_result = input_guard.check(message, user_role=user.role.value if hasattr(user.role, 'value') else str(user.role))
         if input_result.is_blocked:
             # Log guardrail block
             await log_action(
@@ -232,7 +232,7 @@ class AIService:
         """Streaming chat response"""
         # 1. Guardrail check first
         input_guard = InputGuardrail(await load_guardrail_rules(db))
-        result = input_guard.check(message)
+        result = input_guard.check(message, user_role=user.role.value if hasattr(user.role, 'value') else str(user.role))
 
         if result.is_blocked:
             await log_action(db, user, AuditAction.GUARDRAIL_BLOCK, "ai_chat", None,
