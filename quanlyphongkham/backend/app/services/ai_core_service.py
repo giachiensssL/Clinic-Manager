@@ -91,7 +91,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-3.8-flash",
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -132,7 +132,7 @@ class AICoreService:
                         # Re-build model và chat với key mới
                         gemini_key_manager.configure_genai()
                         model = genai.GenerativeModel(
-                            model_name="gemini-2.5-flash",
+                            model_name="gemini-3.8-flash",
                             system_instruction=system_prompt,
                             tools=tools if tools else None
                         )
@@ -283,7 +283,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-3.8-flash",
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -331,7 +331,7 @@ class AICoreService:
 
             def make_model():
                 return genai.GenerativeModel(
-                    model_name="gemini-2.5-flash",
+                    model_name="gemini-3.8-flash",
                     system_instruction=system_prompt,
                     tools=tools if tools else None
                 )
