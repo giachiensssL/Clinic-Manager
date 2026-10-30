@@ -39,9 +39,6 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Tài khoản đã bị vô hiệu hóa")
     
-    # Update last login
-    user.last_login = datetime.now(timezone.utc)
-    
     # Get full name from staff or patient
     full_name = await get_full_name(db, user)
     
@@ -49,11 +46,15 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
     token_data = {"sub": user.id, "role": user.role.value, "username": user.username}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
-    
-    await log_action(db, user, AuditAction.LOGIN, "auth", user.id,
-                    f"Successful login", request.client.host if request.client else None)
-    
-    await db.commit()
+
+    # Update last login and audit log safely
+    try:
+        user.last_login = datetime.now(timezone.utc)
+        await log_action(db, user, AuditAction.LOGIN, "auth", user.id,
+                        f"Successful login", request.client.host if request.client else None)
+        await db.commit()
+    except Exception:
+        await db.rollback()
     
     return Token(
         access_token=access_token,

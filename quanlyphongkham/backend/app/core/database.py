@@ -30,7 +30,7 @@ engine_kwargs = {
 if "sqlite" in settings.DATABASE_URL:
     # SQLite dùng NullPool (aiosqlite) — không hỗ trợ pool_size/max_overflow
     engine_kwargs["connect_args"] = {
-        "timeout": 30,            # Chờ tối đa 30s nếu DB bị lock
+        "timeout": 15,            # Chờ tối đa 15s nếu DB bị lock
         "check_same_thread": False,
     }
 else:
@@ -51,7 +51,7 @@ if "sqlite" in settings.DATABASE_URL:
     def set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")    # Cho phép đọc đồng thời khi đang ghi
-        cursor.execute("PRAGMA busy_timeout=30000")  # 30s timeout thay vì fail ngay
+        cursor.execute("PRAGMA busy_timeout=15000")  # 15s timeout
         cursor.execute("PRAGMA synchronous=NORMAL")  # Cân bằng tốc độ/an toàn
         cursor.close()
 

@@ -99,7 +99,6 @@ async def chat(
 async def chat_stream(
     message: str,
     conversation_id: str = None,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -110,14 +109,18 @@ async def chat_stream(
 
     import json
     from fastapi.responses import StreamingResponse
+    from app.core.database import AsyncSessionLocal
     
     async def event_generator():
-        try:
-            async for chunk in ai_core_service.process_chat_stream(db, current_user, message, conversation_id):
-                yield f"data: {json.dumps(chunk)}\n\n"
-        except Exception:
-            fallback = "Dịch vụ AI đang tạm gián đoạn. Yêu cầu của bạn đã được ghi nhận; vui lòng thử lại sau ít giây hoặc sử dụng chức năng tra cứu trực tiếp trong hệ thống."
-            yield f"data: {json.dumps({'chunk': fallback})}\n\n"
-            yield f"data: {json.dumps({'status': 'done'})}\n\n"
+        async with AsyncSessionLocal() as session:
+            try:
+                async for chunk in ai_core_service.process_chat_stream(session, current_user, message, conversation_id):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                fallback = "Dịch vụ AI đang tạm gián đoạn. Yêu cầu của bạn đã được ghi nhận; vui lòng thử lại sau ít giây hoặc sử dụng chức năng tra cứu trực tiếp trong hệ thống."
+                yield f"data: {json.dumps({'chunk': fallback})}\n\n"
+                yield f"data: {json.dumps({'status': 'done'})}\n\n"
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
