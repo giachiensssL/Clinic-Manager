@@ -348,7 +348,15 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6" onClick={() => { setNotifOpen(false); setUserMenuOpen(false); }}>
+        <div 
+          className={cn(
+            "flex-1 bg-slate-50 min-h-0 min-w-0 flex flex-col",
+            (location.pathname.includes('/ai') || location.pathname === '/ai-assistant')
+              ? "overflow-hidden p-2 sm:p-3" 
+              : "overflow-y-auto p-4 md:p-6"
+          )} 
+          onClick={() => { setNotifOpen(false); setUserMenuOpen(false); }}
+        >
           <Outlet />
         </div>
       </main>

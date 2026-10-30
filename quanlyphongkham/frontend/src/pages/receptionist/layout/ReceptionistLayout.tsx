@@ -1,6 +1,7 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../../store/authStore';
+import { cn } from '@/lib/utils';
 import { LayoutDashboard, Calendar, Users, ListOrdered, CreditCard, FileText, Bot, Bell, Settings, LogOut, HeartPulse } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar';
 import { Button } from '../../../components/ui/button';
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast';
 export default function ReceptionistLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -31,7 +33,7 @@ export default function ReceptionistLayout() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed inset-y-0 z-10">
         <div className="h-16 flex items-center px-6 border-b border-slate-800">
@@ -90,8 +92,8 @@ export default function ReceptionistLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 pl-64 flex flex-col min-h-screen">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10">
+      <main className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
           <h1 className="text-xl font-semibold text-slate-800">Lễ Tân Portal</h1>
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" className="relative text-slate-500" onClick={() => navigate('/receptionist/notifications')}>
@@ -106,7 +108,10 @@ export default function ReceptionistLayout() {
             </div>
           </div>
         </header>
-        <div className="flex-1 p-6 overflow-auto">
+        <div className={cn(
+          "flex-1 min-h-0 min-w-0 flex flex-col",
+          location.pathname.includes('/ai') ? "overflow-hidden p-2 sm:p-3" : "p-6 overflow-auto"
+        )}>
           <Outlet />
         </div>
       </main>

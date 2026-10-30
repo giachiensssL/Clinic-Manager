@@ -36,8 +36,11 @@ export default function PatientLayout() {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         <PatientHeader onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl h-full">
+        <main className={cn(
+          "flex-1 min-h-0 min-w-0 flex flex-col",
+          location.pathname.includes('/ai') ? "overflow-hidden p-2 sm:p-3" : "overflow-y-auto p-4 md:p-6 lg:p-8"
+        )}>
+          <div className={cn("h-full", location.pathname.includes('/ai') ? "w-full flex-1 min-h-0 flex flex-col" : "mx-auto max-w-7xl")}>
             <Outlet />
           </div>
         </main>

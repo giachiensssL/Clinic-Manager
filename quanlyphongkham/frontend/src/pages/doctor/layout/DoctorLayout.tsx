@@ -230,7 +230,10 @@ export default function DoctorLayout() {
           </div>
         </header>
         
-        <main className="flex-1 overflow-y-auto">
+        <main className={cn(
+          "flex-1 min-h-0 min-w-0 flex flex-col",
+          location.pathname.includes('/ai') ? "overflow-hidden p-2 sm:p-3" : "overflow-y-auto"
+        )}>
           <Outlet />
         </main>
       </div>
