@@ -28,3 +28,10 @@ build/
 *.sw?
 .DS_Store
 Thumbs.db
+
+# Scratch test scripts
+check_api_keys.py
+list_models_v2.py
+test_gemini.py
+test_gemini25.py
+

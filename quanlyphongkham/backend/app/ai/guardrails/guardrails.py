@@ -64,7 +64,7 @@ class InputGuardrail:
     def __init__(self, custom_rules: list[AIGuardrailRule] = None):
         self.custom_rules = custom_rules or []
 
-    def check(self, text: str) -> GuardrailResult:
+    def check(self, text: str, user_role: str = None) -> GuardrailResult:
         """
         Kiểm tra input:
         1. Keyword matching
@@ -73,14 +73,30 @@ class InputGuardrail:
         """
         text_lower = text.lower()
 
-        # 1. Check default blocked keywords
-        for keyword in DEFAULT_BLOCKED_KEYWORDS:
-            if keyword.lower() in text_lower:
-                return GuardrailResult(
-                    is_blocked=True,
-                    reason=f"Yêu cầu liên quan đến chẩn đoán hoặc điều trị y tế",
-                    matched_pattern=keyword,
-                )
+        # 1. Check default blocked keywords (Bypass for DOCTOR role)
+        if user_role != "doctor":
+            # Kiểm tra riêng cho Admin: Nghiêm cấm xem bệnh án, hồ sơ y tế cá nhân
+            if user_role == "admin":
+                admin_medical_blocked = [
+                    "bệnh án của", "hồ sơ bệnh án", "xem bệnh án", 
+                    "bệnh án bệnh nhân", "hồ sơ y tế của", "đơn thuốc của bệnh nhân",
+                    "medical record of"
+                ]
+                for p in admin_medical_blocked:
+                    if p in text_lower:
+                        return GuardrailResult(
+                            is_blocked=True,
+                            reason="Tài khoản Quản trị viên không được phép truy cập hồ sơ bệnh án hoặc dữ liệu y tế cá nhân của bệnh nhân (Bảo mật RBAC)",
+                            matched_pattern=p
+                        )
+
+            for keyword in DEFAULT_BLOCKED_KEYWORDS:
+                if keyword.lower() in text_lower:
+                    return GuardrailResult(
+                        is_blocked=True,
+                        reason=f"Yêu cầu liên quan đến chẩn đoán hoặc điều trị y tế",
+                        matched_pattern=keyword,
+                    )
 
         # 2. Check injection patterns
         for pattern in INJECTION_PATTERNS:
@@ -122,10 +138,13 @@ class InputGuardrail:
 class OutputGuardrail:
     """Kiểm tra output của LLM trước khi trả về cho user"""
 
-    def check(self, text: str) -> GuardrailResult:
+    def check(self, text: str, user_role: str = None) -> GuardrailResult:
         """
         Kiểm tra output có chứa nội dung lâm sàng nguy hiểm không
         """
+        if user_role == "doctor":
+            return GuardrailResult(is_blocked=False)
+
         text_lower = text.lower()
 
         # Phát hiện nếu AI cố tình đưa ra chẩn đoán

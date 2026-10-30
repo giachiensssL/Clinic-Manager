@@ -35,6 +35,10 @@ class GeminiKeyManager:
             or "exhausted" in err
             or "resource_exhausted" in err
             or "resourceexhausted" in err
+            or "404" in err
+            or "not found" in err
+            or "no longer available" in err
+            or "rate limit" in err
         )
 
     def rotate(self) -> Optional[str]:
@@ -60,6 +64,15 @@ class GeminiKeyManager:
 
         logger.error("[GeminiKeyManager] Tất cả API key đã hết quota!")
         return None
+
+    def get_model_name(self) -> str:
+        """
+        Trả về tên model phù hợp với key hiện tại.
+        Key 1 (cũ) dùng gemini-2.5-flash, các Key mới dùng gemini-3.8-flash.
+        """
+        if self._current_index == 0:
+            return "gemini-2.5-flash"
+        return "gemini-3.8-flash"
 
     def configure_genai(self):
         """Cấu hình genai với key hiện tại."""

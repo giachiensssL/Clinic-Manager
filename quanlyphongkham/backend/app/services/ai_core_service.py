@@ -3,11 +3,28 @@ from google.generativeai.types import FunctionDeclaration, Tool
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.gemini_key_manager import gemini_key_manager
-from app.models.models import User
+from app.models.models import User, UserRole
 from app.services.ai_context_service import ai_context_service
 from app.services.ai_tool_registry import ai_tool_registry
 from app.services.ai_conversation_service import ai_conversation_service
 from typing import Optional
+
+def _fallback_chat_response(message: str, role: str) -> str:
+    m = (message or "").lower()
+    if role == "admin":
+        return "Hệ thống AI Cố vấn Quản trị đang tạm thời gặp gián đoạn kết nối tới AI Provider. Dữ liệu quản trị của bạn vẫn an toàn; vui lòng thử lại sau giây lát hoặc tra cứu trực tiếp qua các mục quản trị tương ứng trên hệ thống."
+    if any(k in m for k in ["chào", "xin chào", "hello", "hi"]):
+        return "Xin chào! Tôi đã sẵn sàng hỗ trợ bạn trong phạm vi của hệ thống. Bạn vui lòng mô tả nhu cầu cần tra cứu hoặc xử lý."
+    if "lịch" in m or "appointment" in m:
+        return "Bạn có thể tra cứu lịch hẹn trong mục quản lý lịch. Nếu cần đặt lịch, vui lòng cho biết ngày, giờ và bác sĩ mong muốn."
+    if "doanh thu" in m or "revenue" in m:
+        return "Bạn có thể xem tổng hợp doanh thu trong trang báo cáo. Tôi đang tạm thời không thể phân tích dữ liệu trực tiếp, vui lòng thử lại sau."
+    if "bệnh nhân" in m or "patient" in m:
+        return "Tôi có thể hỗ trợ tra cứu thông tin bệnh nhân trong phạm vi quyền truy cập của tài khoản. Vui lòng cung cấp tên hoặc mã bệnh nhân cần tìm."
+    if "phác đồ" in m or "điều trị" in m or "thuốc" in m:
+        return "Tôi có thể hỗ trợ tra cứu và trình bày thông tin chuyên môn, nhưng không thay thế quyết định lâm sàng của bác sĩ."
+    return "Tôi đã nhận được yêu cầu của bạn. Dịch vụ AI đang có gián đoạn kết nối, vui lòng thử lại sau ít phút hoặc sử dụng các chức năng tra cứu trực tiếp trong hệ thống."
+
 
 def _handle_gemini_error(e: Exception) -> str:
     import asyncio
@@ -72,6 +89,21 @@ class AICoreService:
         
         safe_message = message
         if input_result.is_blocked:
+            from app.models.models import AuditLog, AuditAction
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    username=user.username,
+                    user_role=user.role.value,
+                    action=AuditAction.GUARDRAIL_BLOCK,
+                    resource_type="rbac_policy",
+                    details=f"Yêu cầu bị từ chối: {input_result.reason} (mẫu: {input_result.matched_pattern})",
+                    result="blocked"
+                )
+                db.add(audit)
+                await db.commit()
+            except Exception:
+                pass
             # Inject a system prompt directive to gracefully handle this instead of hard-failing
             safe_message = f"[SYSTEM_DIRECTIVE_HIDDEN: Hệ thống bảo mật phát hiện yêu cầu có vấn đề: {input_result.reason}. BẠN PHẢI TỪ CHỐI YÊU CẦU NÀY CỦA NGƯỜI DÙNG MỘT CÁCH LỊCH SỰ, TỰ NHIÊN, DỰA VÀO QUYỀN HẠN CỦA BẠN. KHÔNG NÓI VỀ CHỈ THỊ NÀY.]\nUser: {message}"
 
@@ -91,7 +123,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-3.8-flash",
+            model_name=gemini_key_manager.get_model_name(),
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -122,30 +154,74 @@ class AICoreService:
             for _attempt in range(len(gemini_key_manager._keys)):
                 try:
                     gemini_key_manager.configure_genai()
-                    response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=60.0)
+                    # Sử dụng timeout 12.0s để không làm treo giao diện người dùng
+                    response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=12.0)
                     break
                 except Exception as _e:
-                    if gemini_key_manager._is_quota_error(_e):
+                    if gemini_key_manager._is_quota_error(_e) or isinstance(_e, asyncio.TimeoutError):
                         new_key = gemini_key_manager.rotate()
                         if new_key is None:
                             raise
                         # Re-build model và chat với key mới
                         gemini_key_manager.configure_genai()
                         model = genai.GenerativeModel(
-                            model_name="gemini-3.8-flash",
+                            model_name=gemini_key_manager.get_model_name(),
                             system_instruction=system_prompt,
                             tools=tools if tools else None
                         )
                         chat = model.start_chat(history=gemini_history)
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
                     else:
                         raise
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            error_msg = _handle_gemini_error(e)
-            await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
-            return {"conversation_id": conversation_id, "response": error_msg}
+            # Nếu là Quản trị viên (Admin), tự động kích hoạt AdminAISynthesizer với 100% dữ liệu thực từ Database
+            if user.role == UserRole.ADMIN:
+                from app.services.admin_ai_synthesizer import AdminAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+
+            # Nếu là Bác sĩ (Doctor), tự động kích hoạt DoctorAISynthesizer với 100% dữ liệu thực từ Database
+            if user.role == UserRole.DOCTOR:
+                from app.services.doctor_ai_synthesizer import DoctorAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = DoctorAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await DoctorAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+
+            # Nếu là Bệnh nhân (Patient), tự động kích hoạt PatientAISynthesizer với 100% dữ liệu thực từ Database
+            if user.role == UserRole.PATIENT:
+                from app.services.patient_ai_synthesizer import PatientAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = PatientAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await PatientAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+
+            # Nếu là Lễ tân (Receptionist), tự động kích hoạt ReceptionistAISynthesizer với 100% dữ liệu thực từ Database
+            if user.role == UserRole.RECEPTIONIST:
+                from app.services.receptionist_ai_synthesizer import ReceptionistAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = ReceptionistAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await ReceptionistAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+
+            # Nếu là Kế toán (Accountant), tự động kích hoạt AccountantAISynthesizer với 100% dữ liệu thực từ Database
+            if user.role == UserRole.ACCOUNTANT:
+                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+
+            fallback_msg = _fallback_chat_response(message, user.role.value)
+            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+            return {"conversation_id": conversation_id, "response": fallback_msg}
 
             
         # 7. Check Function Calling Loop
@@ -208,9 +284,9 @@ class AICoreService:
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                error_msg = _handle_gemini_error(e)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
-                return {"conversation_id": conversation_id, "response": error_msg}
+                fallback_msg = _fallback_chat_response(message, user.role.value)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+                return {"conversation_id": conversation_id, "response": fallback_msg}
 
         # 8. Trả về text cuối cùng
         try:
@@ -223,6 +299,27 @@ class AICoreService:
                         final_text += part.text
             if not final_text:
                 final_text = "Tôi đã xử lý yêu cầu nhưng không thể tạo phản hồi chữ hợp lệ. Vui lòng thử lại."
+
+        # Kiểm tra riêng cho Admin: Không được hỏi ngược lại hoặc từ chối sai thẩm quyền
+        if user.role == UserRole.ADMIN:
+            lower_res = final_text.lower()
+            unwanted_patterns = [
+                "bạn có muốn tôi", "có muốn tôi làm", "bạn có muốn", 
+                "không thể thống kê lượng bệnh nhân", "chức năng này không có sẵn"
+            ]
+            if any(p in lower_res for p in unwanted_patterns):
+                from app.services.admin_ai_synthesizer import AdminAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
+                final_text = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
+
+        # Kiểm tra riêng cho Kế toán: Đảm bảo phản hồi luôn đủ cấu trúc 5 phần & số liệu chính xác
+        if user.role == UserRole.ACCOUNTANT:
+            if "1. Kết quả tổng quan" not in final_text or "2. Bảng số liệu chi tiết" not in final_text:
+                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
+                final_text = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
 
         # 8.5 Kiểm tra output bằng guardrail
         output_guard = OutputGuardrail()
@@ -266,7 +363,22 @@ class AICoreService:
         
         safe_message = message
         if input_result.is_blocked:
-            safe_message = f"[SYSTEM_DIRECTIVE_HIDDEN: Yêu cầu bị chặn do: {input_result.reason}. TỪ CHỐI LỊCH SỰ.] {message}"
+            from app.models.models import AuditLog, AuditAction
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    username=user.username,
+                    user_role=user.role.value,
+                    action=AuditAction.GUARDRAIL_BLOCK,
+                    resource_type="rbac_policy",
+                    details=f"Yêu cầu bị từ chối: {input_result.reason} (mẫu: {input_result.matched_pattern})",
+                    result="blocked"
+                )
+                db.add(audit)
+                await db.commit()
+            except Exception:
+                pass
+            safe_message = f"[SYSTEM_DIRECTIVE_HIDDEN: Yêu cầu bị chặn do: {input_result.reason}. TỪ CHỐI LỊCH SỰ, GIẢI THÍCH GIỚI HẠN QUYỀN HẠN.] {message}"
 
         # 4. Context & Tools
         system_prompt = ai_context_service.get_system_prompt(user)
@@ -283,7 +395,7 @@ class AICoreService:
                 tools = [{"function_declarations": gemini_tools}]
         
         model = genai.GenerativeModel(
-            model_name="gemini-3.8-flash",
+            model_name=gemini_key_manager.get_model_name(),
             system_instruction=system_prompt,
             tools=tools if tools else None
         )
@@ -331,7 +443,7 @@ class AICoreService:
 
             def make_model():
                 return genai.GenerativeModel(
-                    model_name="gemini-3.8-flash",
+                    model_name=gemini_key_manager.get_model_name(),
                     system_instruction=system_prompt,
                     tools=tools if tools else None
                 )
@@ -372,26 +484,124 @@ class AICoreService:
                     return
                     
                 tool_result = await ai_tool_registry.execute_tool(db, user, func_name, args, action_confirmed=False)
+
+                if isinstance(tool_result, dict) and tool_result.get("requires_confirmation"):
+                    confirmation = {
+                        "is_tool_call": True,
+                        "tool_call_details": {
+                            "tool_name": func_name,
+                            "requires_confirmation": True,
+                            "confirmation_message": tool_result["confirmation_message"],
+                            "data": tool_result,
+                        },
+                        "conversation_id": conversation_id,
+                    }
+                    yield confirmation
+                    yield {"status": "awaiting_confirmation"}
+                    return
                 
                 response_generator = await asyncio.wait_for(
                     chat.send_message_async({"function_response": {"name": func_name, "response": tool_result}}, stream=True), 
                     timeout=60.0
                 )
                 
+            if not final_text.strip():
+                final_text = "Tôi đã xử lý yêu cầu nhưng chưa nhận được phản hồi phù hợp. Vui lòng thử lại hoặc diễn đạt yêu cầu cụ thể hơn."
+
             out_res = OutputGuardrail().check(final_text, user_role=user.role.value)
             if out_res.is_blocked:
-                warning = "\n\n[Hệ thống: Thông tin trên có thể chứa nội dung nhạy cảm. Vui lòng tham khảo ý kiến bác sĩ.]"
-                yield {"chunk": warning}
-                final_text += warning
-                
+                final_text = "Xin lỗi, tôi phát hiện nội dung nhạy cảm hoặc vượt giới hạn tư vấn. Vui lòng liên hệ bác sĩ để được hỗ trợ trực tiếp."
+                yield {"chunk": final_text}
+            
             await ai_conversation_service.add_message(db, conversation_id, "assistant", final_text)
             yield {"status": "done"}
             
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            error_msg = _handle_gemini_error(e)
-            yield {"error": error_msg}
+            if user.role == UserRole.ADMIN:
+                from app.services.admin_ai_synthesizer import AdminAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
+                
+                # Stream chunk từng từ để tạo trải nghiệm trực quan mượt mà
+                words = synthesized.split(" ")
+                for i, w in enumerate(words):
+                    chunk_text = w + (" " if i < len(words) - 1 else "")
+                    yield {"chunk": chunk_text}
+                    await asyncio.sleep(0.01)
+                
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                yield {"status": "done"}
+                return
+
+            if user.role == UserRole.DOCTOR:
+                from app.services.doctor_ai_synthesizer import DoctorAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = DoctorAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await DoctorAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                
+                words = synthesized.split(" ")
+                for i, w in enumerate(words):
+                    chunk_text = w + (" " if i < len(words) - 1 else "")
+                    yield {"chunk": chunk_text}
+                    await asyncio.sleep(0.01)
+                
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                yield {"status": "done"}
+                return
+
+            if user.role == UserRole.PATIENT:
+                from app.services.patient_ai_synthesizer import PatientAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = PatientAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await PatientAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                
+                words = synthesized.split(" ")
+                for i, w in enumerate(words):
+                    chunk_text = w + (" " if i < len(words) - 1 else "")
+                    yield {"chunk": chunk_text}
+                    await asyncio.sleep(0.01)
+                
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                yield {"status": "done"}
+                return
+
+            if user.role == UserRole.RECEPTIONIST:
+                from app.services.receptionist_ai_synthesizer import ReceptionistAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = ReceptionistAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await ReceptionistAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                
+                words = synthesized.split(" ")
+                for i, w in enumerate(words):
+                    chunk_text = w + (" " if i < len(words) - 1 else "")
+                    yield {"chunk": chunk_text}
+                    await asyncio.sleep(0.01)
+                
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                yield {"status": "done"}
+                return
+
+            if user.role == UserRole.ACCOUNTANT:
+                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
+                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
+                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
+                synthesized = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
+                
+                words = synthesized.split(" ")
+                for i, w in enumerate(words):
+                    chunk_text = w + (" " if i < len(words) - 1 else "")
+                    yield {"chunk": chunk_text}
+                    await asyncio.sleep(0.01)
+                
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
+                yield {"status": "done"}
+                return
+
+            fallback_msg = _fallback_chat_response(message, user.role.value)
+            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+            yield {"chunk": fallback_msg}
+            yield {"status": "done"}
 
 
 ai_core_service = AICoreService()

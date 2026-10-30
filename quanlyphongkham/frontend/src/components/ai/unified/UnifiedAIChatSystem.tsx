@@ -16,82 +16,168 @@ const getRoleConfig = (role: string) => {
   
   if (normalized === 'doctor') {
     return {
-      title: 'AI Trợ lý Y khoa',
-      subtitle: 'Trợ lý thông minh của Bác sĩ',
-      welcomeTitle: 'Trợ lý Y khoa (AI Bác sĩ)',
-      welcomeMessage: 'Tôi hỗ trợ phân tích hồ sơ bệnh án, gợi ý chẩn đoán, tổng hợp kết quả xét nghiệm và tra cứu phác đồ điều trị chuyên sâu.',
-      introMessage: `Xin chào Bác sĩ! Tôi là AI Trợ lý Y khoa. Tôi có thể hỗ trợ Bác sĩ các công việc sau:
-- **Tóm tắt bệnh án**: Lấy hồ sơ y tế, lịch sử khám, xét nghiệm và đơn thuốc của một bệnh nhân.
-- **Kiểm tra lịch trình**: Xem lịch khám hôm nay và danh sách bệnh nhân đang chờ (hàng đợi).
-- **Gợi ý phác đồ & Tương tác thuốc**: Tra cứu các thông tin y khoa chuyên sâu hỗ trợ ra quyết định lâm sàng.`,
-      quickActions: ['Tóm tắt bệnh án', 'Gợi ý phác đồ', 'Kiểm tra tương tác thuốc', 'Xem lịch khám hôm nay'],
-      suggestedQuestions: ['Có bao nhiêu bệnh nhân đang chờ khám?', 'Tóm tắt lịch sử khám của bệnh nhân tiếp theo.', 'Tra cứu phác đồ điều trị tiểu đường type 2.'],
-      contextModules: ['Bệnh nhân đang khám', 'Lịch hẹn'],
-      warningText: 'AI chỉ cung cấp thông tin hỗ trợ, không thay thế quyết định lâm sàng của bác sĩ.'
+      title: 'AI Medical Assistant',
+      subtitle: 'Trợ lý AI Y khoa Lâm sàng – Hỗ trợ Bác sĩ',
+      welcomeTitle: 'AI Medical Assistant – Trợ lý Bác sĩ',
+      welcomeMessage: 'Tôi là trợ lý AI chuyên trách hỗ trợ Bác sĩ tra cứu lịch khám buồng bệnh, tóm tắt hồ sơ bệnh án EMR, theo dõi kết quả xét nghiệm và cung cấp thông tin chuyên môn tham khảo.',
+      introMessage: `Xin chào Bác sĩ! Tôi là **AI Medical Assistant**. Tôi có thể hỗ trợ Bác sĩ:
+- **Lịch khám & Hàng đợi**: Tra cứu lịch khám hôm nay, kiểm tra bệnh nhân đang chờ và phát hiện lịch trùng.
+- **Hồ sơ bệnh án EMR**: Tóm tắt tiền sử, sinh hiệu, chẩn đoán, phác đồ điều trị và rà soát hồ sơ còn thiếu thông tin.
+- **Cận lâm sàng & Thống kê**: Tổng hợp kết quả xét nghiệm, lịch sử các lần khám và báo cáo khối lượng khám trong tháng.`,
+      quickActions: [
+        'Lịch khám hôm nay',
+        'Bệnh nhân đang chờ',
+        'Hồ sơ chưa hoàn tất',
+        'Thống kê tháng này',
+        'Kiểm tra lịch trùng',
+        'Tóm tắt bệnh án'
+      ],
+      suggestedQuestions: [
+        'Hôm nay tôi có bao nhiêu bệnh nhân cần khám?',
+        'Liệt kê lịch khám của tôi trong ngày hôm nay.',
+        'Những bệnh nhân nào đang chờ khám?',
+        'Tóm tắt hồ sơ bệnh án của bệnh nhân mã BN000002.',
+        'Bệnh nhân này đã từng khám những lần nào?',
+        'Những hồ sơ khám nào còn thiếu thông tin?',
+        'Thống kê số lượng bệnh nhân tôi đã khám trong tháng này.',
+        'Có lịch khám nào bị trùng không?',
+        'Tổng hợp các kết quả xét nghiệm gần đây của bệnh nhân này.'
+      ],
+      contextModules: ['Lịch khám buồng bệnh', 'Hồ sơ EMR & Cận lâm sàng', 'Hỗ trợ lâm sàng'],
+      warningText: 'AI chỉ cung cấp thông tin hỗ trợ lâm sàng mang tính tham khảo, tuyệt đối không thay thế quyết định chuyên môn của Bác sĩ.'
     };
   }
   if (normalized === 'receptionist') {
     return {
-      title: 'AI Trợ lý Lễ tân',
-      subtitle: 'Hỗ trợ hành chính & tiếp đón',
-      welcomeTitle: 'Trợ lý AI Lễ Tân',
-      welcomeMessage: 'Tôi có thể hỗ trợ bạn tra cứu lịch khám của bác sĩ, quản lý hàng đợi, xử lý các câu hỏi thường gặp của bệnh nhân, hoặc tạo nhanh lịch hẹn.',
-      introMessage: `Xin chào! Tôi là AI Trợ lý Lễ tân. Tôi có thể hỗ trợ bạn:
-- **Tìm kiếm bệnh nhân**: Tra cứu thông tin bệnh nhân qua tên, số điện thoại hoặc email.
-- **Kiểm tra lịch Bác sĩ**: Xem lịch làm việc và hàng đợi hiện tại của bất kỳ bác sĩ nào.
-- **Tạo lịch hẹn**: Đặt lịch hẹn mới cho bệnh nhân.`,
-      quickActions: ['Tìm bệnh nhân', 'Kiểm tra lịch hẹn', 'Kiểm tra lịch bác sĩ', 'Danh sách chờ'],
-      suggestedQuestions: ['Hôm nay có những bác sĩ nào đang làm việc?', 'Tìm lịch hẹn của bệnh nhân Nguyễn Văn A.', 'Hướng dẫn quy trình check-in.'],
-      contextModules: ['Hàng đợi', 'Lịch hẹn'],
+      title: 'AI Receptionist Assistant',
+      subtitle: 'Điều phối Tiếp đón & Buồng khám',
+      welcomeTitle: 'AI Receptionist Assistant – Trợ lý Điều phối Lễ tân',
+      welcomeMessage: 'Chào bạn! Tôi là trợ lý AI điều phối lễ tân thông minh tại Clinic AI. Tôi hỗ trợ bạn tiếp nhận bệnh nhân, kiểm tra hàng đợi buồng khám, rà soát lịch trống bác sĩ theo chuyên khoa, phát hiện lịch trùng và thống kê tiếp đón thời gian thực.',
+      introMessage: `Xin chào! Tôi là **AI Receptionist Assistant – Trợ lý Điều phối Lễ tân Thông minh**. Tôi đồng hành cùng bạn xử lý nhanh các nghiệp vụ:
+- **Tiếp đón & Hàng đợi**: Kiểm tra số lượng bệnh nhân cần tiếp nhận hôm nay, xem danh sách chờ khám và cảnh báo ca chờ quá 30 phút.
+- **Lịch hẹn & Lịch trống BS**: Tra cứu lịch trống của Bác sĩ theo chuyên khoa (Da liễu, Nội, Nhi...) vào ngày mai / chiều mai, rà soát ca chưa xác nhận hoặc trùng lịch.
+- **Hồ sơ hành chính**: Tra cứu nhanh hồ sơ bệnh nhân qua mã định danh (BN001, BN000002...), họ tên hoặc SĐT.
+- **Điều phối buồng khám**: Cập nhật danh sách Bác sĩ trực hôm nay, bảng giá dịch vụ niêm yết và vị trí các phòng ban chức năng.`,
+      quickActions: [
+        'Tiếp nhận hôm nay',
+        'Danh sách chờ khám',
+        'Bác sĩ trực hôm nay',
+        'Kiểm tra trùng lịch',
+        'Lịch trống ngày mai',
+        'Tra cứu hồ sơ BN'
+      ],
+      suggestedQuestions: [
+        'Hôm nay có bao nhiêu bệnh nhân cần tiếp nhận?',
+        'Danh sách bệnh nhân đang chờ khám hiện tại?',
+        'Có bệnh nhân nào đã đến nhưng chưa được tiếp nhận không?',
+        'Kiểm tra lịch trống của bác sĩ da liễu ngày mai.',
+        'Bệnh nhân mã BN001 đã có hồ sơ chưa?',
+        'Tôi muốn đặt lịch cho bệnh nhân này vào chiều mai.',
+        'Có lịch khám nào bị trùng không?',
+        'Những lịch hẹn nào chưa được xác nhận?',
+        'Bác sĩ nào đang làm việc hôm nay?',
+        'Thống kê số lượng bệnh nhân đã tiếp nhận trong ngày.'
+      ],
+      contextModules: ['Hàng đợi sảnh & Tiếp đón', 'Lịch hẹn & Điều phối buồng', 'Tra cứu hành chính & Bảng giá'],
       warningText: null
     };
   }
   if (normalized === 'admin') {
     return {
       title: 'AI Cố vấn Quản trị',
-      subtitle: 'Phân tích hệ thống & vận hành',
-      welcomeTitle: 'AI Quản trị viên (Admin)',
-      welcomeMessage: 'Tôi giúp phân tích dữ liệu phòng khám, tổng hợp báo cáo doanh thu, đánh giá hiệu suất nhân sự và giám sát hoạt động hệ thống.',
-      introMessage: `Xin chào Quản trị viên! Tôi là AI Cố vấn Quản trị. Tôi có thể giúp bạn:
-- **Thống kê hệ thống**: Tổng hợp số lượng người dùng, lịch hẹn và doanh thu tổng quan.
-- **Quản lý Người dùng**: Truy xuất danh sách tài khoản theo từng vai trò.
-- **Nhật ký hoạt động (Audit Logs)**: Kiểm tra các hành động gần nhất trên hệ thống.`,
-      quickActions: ['Thống kê hệ thống', 'Người dùng', 'Hoạt động hệ thống', 'Báo cáo doanh thu'],
-      suggestedQuestions: ['Phân tích doanh thu tháng này.', 'Có bất thường nào trong hệ thống hôm nay không?', 'Thống kê lượng bệnh nhân theo chuyên khoa.'],
-      contextModules: ['Thống kê', 'Hoạt động'],
+      subtitle: 'Clinic AI Administrative Assistant',
+      welcomeTitle: 'AI Cố vấn Quản trị Hệ thống',
+      welcomeMessage: 'Tôi là trợ lý AI chuyên trách quản trị hệ thống phòng khám Clinic AI. Tôi giúp bạn truy xuất dữ liệu thực tế, giám sát bảo mật, phân tích doanh thu và theo dõi tình trạng hoạt động.',
+      introMessage: `Xin chào Quản trị viên! Tôi là **AI Cố vấn Quản trị – Clinic AI Administrative Assistant**. Tôi có thể hỗ trợ bạn các công việc:
+- **Tổng quan & Báo cáo**: Phân tích số liệu người dùng, lịch hẹn khám, thống kê doanh thu và đánh giá tăng trưởng.
+- **Bảo mật & Bất thường**: Rà soát nhật ký Audit Log, phát hiện các lần đăng nhập thất bại và kiểm tra thay đổi phân quyền.
+- **Quản trị Dịch vụ & AI**: Giám sát danh mục dịch vụ phòng khám và theo dõi trạng thái vận hành của dịch vụ AI.`,
+      quickActions: ['Tổng quan hệ thống', 'Thống kê người dùng', 'Kiểm tra bảo mật', 'Báo cáo doanh thu', 'Hoạt động hệ thống', 'Giám sát AI'],
+      suggestedQuestions: [
+        'Hệ thống hôm nay hoạt động như thế nào?',
+        'Có bất thường nào trong hệ thống hôm nay không?',
+        'Thống kê số lượng người dùng hiện tại.',
+        'Phân tích doanh thu tháng này.',
+        'Có bao nhiêu tài khoản mới đăng ký?',
+        'Những hoạt động quản trị nào diễn ra gần đây?',
+        'Các dịch vụ AI có đang hoạt động không?',
+        'Thống kê lượng bệnh nhân theo chuyên khoa.'
+      ],
+      contextModules: ['Tổng quan hệ thống', 'Bảo mật & Audit', 'Tài chính & Dịch vụ'],
       warningText: null
     };
   }
   if (normalized === 'accountant') {
     return {
-      title: 'AI Trợ lý Kế toán',
-      subtitle: 'Quản lý tài chính & hóa đơn',
-      welcomeTitle: 'AI Kế toán',
-      welcomeMessage: 'Tôi hỗ trợ tra cứu hóa đơn, tổng hợp doanh thu, đối soát thanh toán và quản lý các giao dịch tài chính.',
-      introMessage: `Xin chào! Tôi là AI Trợ lý Kế toán. Tôi hỗ trợ xử lý:
-- **Tổng doanh thu**: Kiểm tra doanh thu trong ngày hoặc một ngày cụ thể.
-- **Hóa đơn chưa thanh toán**: Truy xuất danh sách các hóa đơn còn nợ hoặc thanh toán một phần.`,
-      quickActions: ['Tra cứu hóa đơn', 'Thanh toán', 'Doanh thu', 'Đối soát'],
-      suggestedQuestions: ['Tổng doanh thu hôm nay là bao nhiêu?', 'Danh sách hóa đơn chưa thanh toán.', 'Phân tích doanh thu theo bác sĩ.'],
-      contextModules: ['Hóa đơn', 'Giao dịch'],
-      warningText: null
+      title: 'AI Accounting Assistant',
+      subtitle: 'Quản lý Tài chính, Doanh thu & Hóa đơn',
+      welcomeTitle: 'AI Accounting Assistant – Trợ lý Kế toán & Kiểm soát Tài chính',
+      welcomeMessage: 'Chào bạn! Tôi là trợ lý AI chuyên trách kế toán và kiểm soát tài chính tại Clinic AI. Tôi hỗ trợ bạn tra cứu doanh thu đa kỳ, kiểm soát công nợ hóa đơn, theo dõi giao dịch thanh toán thất bại, đối chiếu chéo chứng từ và phân tích cơ cấu doanh thu theo dịch vụ y tế.',
+      introMessage: `Xin chào! Tôi là **AI Accounting Assistant – Trợ lý Kế toán & Kiểm soát Tài chính Thông minh**. Tôi hỗ trợ bạn kiểm soát và quản lý dòng tiền phòng khám:
+- **Doanh thu đa kỳ**: Tra cứu doanh thu hôm nay, tổng kết doanh thu tháng này, so sánh tăng trưởng cùng kỳ và tỷ lệ thu hồi dòng tiền.
+- **Kiểm soát công nợ & Hóa đơn**: Rà soát hóa đơn chưa thanh toán, nợ đọng một phần và tổng hợp dư nợ viện phí cần thu hồi.
+- **Thanh toán & Bất thường**: Kiểm tra phương thức thanh toán (Tiền mặt, Thẻ POS, BHYT), phát hiện giao dịch thất bại và cảnh báo thanh toán trùng lặp.
+- **Đối chiếu chéo (Reconciliation)**: Đối soát tự động số tiền giữa Hóa đơn (\`Billing\`) và Giao dịch (\`Payments\`), phát hiện sai lệch và chứng từ chưa khớp.
+- **Cơ cấu doanh thu dịch vụ**: Phân tích tỷ trọng và xếp hạng các dịch vụ mang lại doanh thu cao nhất phòng khám.`,
+      quickActions: [
+        'Doanh thu hôm nay',
+        'Doanh thu tháng này',
+        'So sánh doanh thu',
+        'Hóa đơn chưa trả',
+        'Đối chiếu giao dịch',
+        'Doanh thu theo dịch vụ'
+      ],
+      suggestedQuestions: [
+        'Doanh thu hôm nay của phòng khám là bao nhiêu?',
+        'Tổng doanh thu trong tháng này?',
+        'So sánh doanh thu tháng này với tháng trước.',
+        'Có bao nhiêu hóa đơn chưa thanh toán?',
+        'Liệt kê các giao dịch thanh toán thất bại hôm nay.',
+        'Những hóa đơn nào chưa được đối chiếu?',
+        'Dịch vụ nào có doanh thu cao nhất trong tháng?',
+        'Tổng số tiền hoàn trả trong tháng này?',
+        'Có giao dịch nào có dấu hiệu trùng lặp không?',
+        'Tổng hợp báo cáo doanh thu theo từng dịch vụ.',
+        'Có sự chênh lệch nào giữa hóa đơn và giao dịch thanh toán không?'
+      ],
+      contextModules: ['Doanh thu & Sổ cái', 'Hóa đơn & Công nợ', 'Giao dịch & Đối chiếu'],
+      warningText: 'Tuân thủ quy định bảo mật tài chính: Mọi điều chỉnh hóa đơn, hoàn tiền hoặc ghi nhận công nợ đều yêu cầu chứng từ phê duyệt hợp lệ.'
     };
   }
   
   // Default to Patient
   return {
-    title: 'AI Trợ lý Sức khỏe',
-    subtitle: 'Đồng hành cùng sức khỏe của bạn',
-    welcomeTitle: 'Trợ lý sức khỏe của bạn',
-    welcomeMessage: 'Hãy hỏi tôi về lịch hẹn, quy trình khám bệnh, theo dõi hồ sơ sức khỏe, thanh toán hoặc các thông tin y tế khác. Tôi luôn sẵn sàng hỗ trợ bạn 24/7.',
-      introMessage: `Chào bạn! Tôi là AI Trợ lý Sức khỏe. Tôi có thể giúp bạn:
-- **Quản lý lịch hẹn**: Xem các lịch hẹn sắp tới hoặc hủy lịch hẹn.
-- **Tra cứu Bác sĩ**: Tìm kiếm và xem thông tin các Bác sĩ đang làm việc tại phòng khám để đặt lịch.
-- **Hồ sơ cá nhân**: Xem lại các đơn thuốc và kết quả xét nghiệm gần nhất.
-- **Tư vấn sức khỏe**: Trả lời các thắc mắc y tế cơ bản.`,
-    quickActions: ['Lịch hẹn của tôi', 'Hồ sơ sức khỏe', 'Đơn thuốc', 'Hỏi AI y tế'],
-    suggestedQuestions: ['Lịch hẹn sắp tới của tôi là khi nào?', 'Tôi cần chuẩn bị gì trước khi xét nghiệm máu?', 'Quy trình thanh toán bảo hiểm như thế nào?'],
-    contextModules: ['Hồ sơ y tế', 'Lịch hẹn cá nhân'],
+    title: 'AI Patient Assistant',
+    subtitle: 'Chăm sóc & Đồng hành Sức khỏe Bệnh nhân',
+    welcomeTitle: 'AI Patient Assistant – Trợ lý Chăm sóc Bệnh nhân',
+    welcomeMessage: 'Chào bạn! Tôi là trợ lý AI chăm sóc và hỗ trợ bệnh nhân trực tuyến tại Clinic AI. Tôi luôn sẵn sàng hỗ trợ bạn tra cứu lịch khám, đặt lịch, xem hồ sơ sức khỏe EMR, kiểm tra hóa đơn viện phí và nhận hướng dẫn y tế an toàn.',
+    introMessage: `Xin chào bạn! Tôi là **AI Patient Assistant – Trợ lý Chăm sóc & Đồng hành cùng Bệnh nhân**. Tôi luôn sẵn sàng hỗ trợ bạn:
+- **Lịch khám & Đặt hẹn**: Tra cứu các ca khám sắp tới, tìm kiếm Bác sĩ theo chuyên khoa, kiểm tra khung giờ trống và hướng dẫn đặt / đổi / hủy lịch hẹn.
+- **Hồ sơ sức khỏe EMR**: Xem lại chẩn đoán, đơn thuốc đã kê và kết quả xét nghiệm / chẩn đoán hình ảnh gần nhất của chính bạn.
+- **Hóa đơn & Viện phí**: Kiểm tra hóa đơn chưa thanh toán, đối soát trạng thái giao dịch ngân hàng hoặc quét mã QR thanh toán nhanh.
+- **Chương trình ưu đãi**: Tra cứu các gói khám sức khỏe tổng quát định kỳ và mã giảm giá hiện hành của phòng khám.
+- **Dặn dò & Chăm sóc**: Hướng dẫn chuẩn bị chu đáo trước khi khám và chăm sóc sức khỏe an toàn sau khi thực hiện dịch vụ.`,
+    quickActions: [
+      'Lịch khám của tôi',
+      'Đặt lịch khám Da liễu',
+      'Bác sĩ chiều mai',
+      'Hồ sơ khám gần đây',
+      'Hóa đơn chưa trả',
+      'Ưu đãi hiện có'
+    ],
+    suggestedQuestions: [
+      'Tôi có lịch khám nào trong tuần này không?',
+      'Tôi muốn đặt lịch khám da liễu.',
+      'Có bác sĩ nào còn lịch khám chiều mai không?',
+      'Tôi muốn đổi lịch khám đã đặt.',
+      'Hồ sơ khám gần đây của tôi có kết quả gì?',
+      'Tôi còn hóa đơn nào chưa thanh toán không?',
+      'Giao dịch thanh toán của tôi đã thành công chưa?',
+      'Hiện tại phòng khám có chương trình khuyến mãi nào?',
+      'Tôi cần chuẩn bị những gì trước khi khám?',
+      'Sau khi thực hiện dịch vụ, tôi cần lưu ý điều gì?'
+    ],
+    contextModules: ['Hồ sơ sức khỏe cá nhân', 'Lịch hẹn & Tiếp đón', 'Hóa đơn & Viện phí'],
     warningText: null
   };
 };
@@ -261,53 +347,63 @@ export default function UnifiedAIChatSystem() {
 
       let done = false;
       let fullText = '';
+      let eventBuffer = '';
+
+      const processEvent = (eventText: string) => {
+        if (!eventText.startsWith('data: ')) return;
+        try {
+          const data = JSON.parse(eventText.slice(6));
+
+          if (data.conversation_id && !conversationIdSet) {
+            conversationIdSet = true;
+            currentActiveId = data.conversation_id;
+            if (!activeId) {
+              setActiveId(data.conversation_id);
+              aiAPI.getConversations().then(res => {
+                setConversations(res.data);
+              }).catch(() => {});
+            }
+          }
+
+          if (typeof data.chunk === 'string') {
+            fullText += data.chunk;
+            setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText } : m));
+          }
+
+          if (data.error) {
+            fullText = typeof data.error === 'string'
+              ? data.error
+              : 'Dịch vụ AI đang tạm gián đoạn. Vui lòng thử lại sau ít phút.';
+            setMessages(prev => prev.map(m => m.id === assistantMsgId
+              ? { ...m, content: fullText, isError: false }
+              : m
+            ));
+          }
+
+          if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
+            setPendingTool(data.tool_call_details);
+          }
+        } catch {
+          // Ignore only malformed framing; valid buffered SSE events are processed below.
+        }
+      };
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
-        if (value) {
-          const chunkStr = decoder.decode(value, { stream: true });
-          const events = chunkStr.split('\n\n');
-          for (const ev of events) {
-            if (ev.startsWith('data: ')) {
-               try {
-                 const data = JSON.parse(ev.slice(6));
-                 
-                 // Nhận conversation_id lần đầu → cập nhật sidebar không làm reload
-                 if (data.conversation_id && !conversationIdSet) {
-                   conversationIdSet = true;
-                   currentActiveId = data.conversation_id;
-                   if (!activeId) {
-                     setActiveId(data.conversation_id);
-                     // Chỉ refresh list sidebar, không load lại conversation
-                     aiAPI.getConversations().then(res => {
-                       setConversations(res.data);
-                     }).catch(() => {});
-                   }
-                 }
-                 
-                 if (data.chunk) {
-                    fullText += data.chunk;
-                    setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText } : m));
-                 }
-                 
-                 if (data.error) {
-                    setMessages(prev => prev.map(m => m.id === assistantMsgId
-                      ? { ...m, content: data.error, isError: true }
-                      : m
-                    ));
-                 }
-                 
-                 if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
-                    setPendingTool(data.tool_call_details);
-                 }
-               } catch (e) {
-                 // ignore parse error for incomplete chunks
-               }
-            }
-          }
+        if (value) eventBuffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex = eventBuffer.indexOf('\n\n');
+        while (separatorIndex >= 0) {
+          const eventText = eventBuffer.slice(0, separatorIndex);
+          eventBuffer = eventBuffer.slice(separatorIndex + 2);
+          processEvent(eventText);
+          separatorIndex = eventBuffer.indexOf('\n\n');
         }
       }
+
+      eventBuffer += decoder.decode();
+      if (eventBuffer.trim()) processEvent(eventBuffer.trim());
       // Streaming xong, scroll một lần cuối
       scrollToBottom('smooth');
     } catch (err: any) {
@@ -315,8 +411,8 @@ export default function UnifiedAIChatSystem() {
       setMessages(prev => [...prev, {
         id: Date.now().toString() + 'err',
         role: 'assistant',
-        content: errorMsg,
-        isError: true,
+        content: 'Không thể kết nối tới dịch vụ AI lúc này. Nội dung của bạn đã được giữ lại; vui lòng thử gửi lại sau ít giây.',
+        isError: false,
         created_at: new Date().toISOString()
       }]);
       scrollToBottom('smooth');
@@ -657,7 +753,7 @@ export default function UnifiedAIChatSystem() {
                 onClick={() => handleSendMessage(sq)}
                 className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:text-blue-600 transition-colors"
               >
-                "{sq}"
+                {sq}
               </button>
             ))}
           </div>

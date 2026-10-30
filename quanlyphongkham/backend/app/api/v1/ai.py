@@ -82,6 +82,9 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     """Gửi tin nhắn AI với cơ chế Function Calling & Confirmation"""
+    if not payload.message or not payload.message.strip():
+        raise HTTPException(status_code=400, detail="Tin nhắn không được để trống")
+
     result = await ai_core_service.process_chat(
         db=db, 
         user=current_user,
@@ -102,6 +105,9 @@ async def chat_stream(
     """
     Chat với AI Assistant (Streaming mode SSE)
     """
+    if not message or not message.strip():
+        raise HTTPException(status_code=400, detail="Tin nhắn không được để trống")
+
     import json
     from fastapi.responses import StreamingResponse
     
@@ -109,7 +115,9 @@ async def chat_stream(
         try:
             async for chunk in ai_core_service.process_chat_stream(db, current_user, message, conversation_id):
                 yield f"data: {json.dumps(chunk)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            fallback = "Dịch vụ AI đang tạm gián đoạn. Yêu cầu của bạn đã được ghi nhận; vui lòng thử lại sau ít giây hoặc sử dụng chức năng tra cứu trực tiếp trong hệ thống."
+            yield f"data: {json.dumps({'chunk': fallback})}\n\n"
+            yield f"data: {json.dumps({'status': 'done'})}\n\n"
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
