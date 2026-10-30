@@ -164,9 +164,10 @@ def _build_key_manager() -> GeminiKeyManager:
         keys = []
 
     if not keys:
-        raise ValueError(
-            "Chưa cấu hình GEMINI_API_KEY hoặc GEMINI_API_KEYS trong .env"
+        logger.warning(
+            "[GeminiKeyManager] Chưa cấu hình GEMINI_API_KEY hoặc GEMINI_API_KEYS trong .env. Sử dụng dummy key cho fallback."
         )
+        keys = ["DUMMY_KEY_FOR_LOCAL_FALLBACK"]
 
     return GeminiKeyManager(keys)
 
