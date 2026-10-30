@@ -23,17 +23,20 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
+from sqlalchemy.pool import NullPool
+
 engine_kwargs = {
     "echo": settings.DEBUG,
-    "pool_pre_ping": True,
 }
 if "sqlite" in settings.DATABASE_URL:
-    # SQLite dùng NullPool (aiosqlite) — không hỗ trợ pool_size/max_overflow
+    # SQLite dùng NullPool (aiosqlite) để tránh nghẽn lock giữa các kết nối pooled
+    engine_kwargs["poolclass"] = NullPool
     engine_kwargs["connect_args"] = {
-        "timeout": 15,            # Chờ tối đa 15s nếu DB bị lock
+        "timeout": 20,            # Chờ tối đa 20s
         "check_same_thread": False,
     }
 else:
+    engine_kwargs["pool_pre_ping"] = True
     engine_kwargs["pool_size"] = 10
     engine_kwargs["max_overflow"] = 20
 
