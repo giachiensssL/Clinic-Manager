@@ -15,7 +15,14 @@ export default function SchedulesManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('2026-09-17'); // Demo date
-  const [schedules, setSchedules] = useState(mockSchedules);
+  const [schedules, setSchedules] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('clinic_schedules');
+      return saved ? JSON.parse(saved) : mockSchedules;
+    } catch {
+      return mockSchedules;
+    }
+  });
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newSchedule, setNewSchedule] = useState({ doctor: '', department: '', room: '', shift: 'Sáng (08:00 - 12:00)' });
@@ -51,7 +58,11 @@ export default function SchedulesManagement() {
       appointments: 0,
       status: 'Bình thường'
     };
-    setSchedules([created, ...schedules]);
+    const updated = [created, ...schedules];
+    setSchedules(updated);
+    try {
+      localStorage.setItem('clinic_schedules', JSON.stringify(updated));
+    } catch {}
     setIsAddOpen(false);
     setNewSchedule({ doctor: '', department: '', room: '', shift: 'Sáng (08:00 - 12:00)' });
     toast.success('Tạo lịch làm việc mới thành công!');

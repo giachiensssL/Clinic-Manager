@@ -155,7 +155,7 @@ export const doctorAPI = {
   getDashboardStats: () => api.get('/doctor/dashboard/stats'),
   getTodayAppointments: () => api.get('/doctor/appointments/today'),
   getRecentActivity: (limit = 10) => api.get('/doctor/dashboard/recent-activity', { params: { limit } }),
-  searchPatients: (q: string) => api.get('/doctor/patients/search', { params: { q } }),
+  searchPatients: (q?: string) => api.get('/doctor/patients/search', { params: q ? { q } : {} }),
 };
 
 export const receptionistAPI = {

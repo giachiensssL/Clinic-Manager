@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pill, Search, Filter, Plus, FileText, X, Trash2, PlusCircle, Loader2 } from 'lucide-react';
-import { prescriptionsAPI, doctorAPI } from '@/services/api';
+import { prescriptionsAPI, doctorAPI, patientsAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function DoctorPrescriptions() {
@@ -39,7 +39,7 @@ export default function DoctorPrescriptions() {
   useEffect(() => {
     fetchPrescriptions();
     // Load patients for prescribing
-    doctorAPI.searchPatients('')
+    patientsAPI.getAll({ size: 100 })
       .then(res => setPatients(res.data.items || []))
       .catch(() => {});
   }, []);
@@ -103,6 +103,18 @@ export default function DoctorPrescriptions() {
         notes: formData.notes.trim() || 'Kê đơn thuốc ngoại trú',
         items: formData.items
       });
+      const selectedPatient = patients.find(p => p.id === formData.patient_id);
+      const newRx = {
+        id: res.data.id || res.data.prescription_code,
+        prescription_code: res.data.prescription_code,
+        patient_name: selectedPatient ? selectedPatient.full_name : 'Bệnh nhân',
+        doctor_name: 'Bác sĩ phụ trách',
+        created_at: new Date().toISOString(),
+        status: 'pending',
+        items_count: formData.items.length
+      };
+      setPrescriptions(prev => [newRx, ...prev]);
+
       toast.success(`Tạo đơn thuốc thành công! Mã: ${res.data.prescription_code}`);
       setIsCreateOpen(false);
       setFormData({
@@ -112,7 +124,7 @@ export default function DoctorPrescriptions() {
           { medicine_name: 'Paracetamol 500mg', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau ăn', unit_price: 2000 }
         ]
       });
-      fetchPrescriptions();
+      await fetchPrescriptions();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Lỗi khi tạo đơn thuốc');
     } finally {

@@ -14,7 +14,14 @@ import toast from 'react-hot-toast';
 export default function StaffManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
-  const [staffList, setStaffList] = useState(mockStaff);
+  const [staffList, setStaffList] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('clinic_staff');
+      return saved ? JSON.parse(saved) : mockStaff;
+    } catch {
+      return mockStaff;
+    }
+  });
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [newStaff, setNewStaff] = useState({ name: '', position: '', department: '', email: '', phone: '' });
   
@@ -44,7 +51,11 @@ export default function StaffManagement() {
       status: 'Đang làm việc',
       hasAccount: false
     };
-    setStaffList([created, ...staffList]);
+    const updated = [created, ...staffList];
+    setStaffList(updated);
+    try {
+      localStorage.setItem('clinic_staff', JSON.stringify(updated));
+    } catch {}
     setIsAddStaffOpen(false);
     setNewStaff({ name: '', position: '', department: '', email: '', phone: '' });
     toast.success('Thêm nhân viên mới thành công!');

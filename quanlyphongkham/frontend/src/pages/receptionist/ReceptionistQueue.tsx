@@ -52,6 +52,7 @@ export default function ReceptionistQueue() {
       });
       toast.success(`Cấp số thứ tự thành công! Số STT: #${res.queue_number}`);
       queryClient.invalidateQueries({ queryKey: ['receptionist-queue'] });
+      queryClient.refetchQueries({ queryKey: ['receptionist-queue'] });
       queryClient.invalidateQueries({ queryKey: ['receptionist-stats'] });
       setIsAddOpen(false);
       setFormData({ patient_id: '', doctor_id: '', notes: '' });

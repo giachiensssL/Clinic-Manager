@@ -54,8 +54,20 @@ async def list_billings(
             "id": b.id,
             "invoice_code": b.invoice_code,
             "patient_name": b.patient.full_name if b.patient else "N/A",
-            "total_amount": b.total_amount,
-            "remaining_amount": b.remaining_amount,
+            "patient": {
+                "id": b.patient.id,
+                "full_name": b.patient.full_name,
+                "patient_code": b.patient.patient_code,
+                "phone": b.patient.phone or "",
+            } if b.patient else None,
+            "consultation_fee": b.consultation_fee or 0.0,
+            "medicine_fee": b.medicine_fee or 0.0,
+            "service_fee": b.service_fee or 0.0,
+            "insurance_covered": b.insurance_covered or 0.0,
+            "discount": b.discount or 0.0,
+            "total_amount": b.total_amount or 0.0,
+            "paid_amount": b.paid_amount or 0.0,
+            "remaining_amount": b.remaining_amount if b.remaining_amount is not None else b.total_amount,
             "status": b.status.value,
             "created_at": b.created_at.isoformat()
         })

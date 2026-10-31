@@ -29,7 +29,7 @@ export default function DoctorPatientsList() {
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const { data } = await doctorAPI.searchPatients(searchTerm || 'a'); 
+      const { data } = await doctorAPI.searchPatients(searchTerm.trim() || undefined); 
       setPatients(data.items || []);
     } catch (error) {
       toast.error('Lỗi khi tải danh sách bệnh nhân');
@@ -41,7 +41,7 @@ export default function DoctorPatientsList() {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchPatients();
-    }, 500);
+    }, 400);
     return () => clearTimeout(timeoutId);
   }, [searchTerm]);
 
@@ -85,7 +85,22 @@ export default function DoctorPatientsList() {
         emergency_contact_name: '',
         emergency_contact_phone: ''
       });
-      fetchPatients();
+
+      // Immediately prepend into state so patient is instantly visible
+      const newCreated = {
+        id: res.data.id,
+        patient_code: res.data.patient_code,
+        full_name: res.data.full_name,
+        gender: res.data.gender,
+        age: res.data.date_of_birth ? new Date().getFullYear() - new Date(res.data.date_of_birth).getFullYear() : null,
+        phone: res.data.phone,
+        last_visit: null,
+        avatar_url: res.data.avatar_url
+      };
+      setPatients(prev => [newCreated, ...prev.filter(p => p.id !== res.data.id)]);
+
+      // Refetch from database
+      await fetchPatients();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Lỗi khi tạo hồ sơ bệnh nhân');
     } finally {
@@ -169,7 +184,7 @@ export default function DoctorPatientsList() {
                     </td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{patient.patient_code}</td>
                     <td className="px-6 py-4 text-slate-600">
-                      {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'} / {patient.age || '--'} tuổi
+                      {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'} / {patient.age ?? (patient.date_of_birth ? (new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()) : '--')} tuổi
                     </td>
                     <td className="px-6 py-4 text-slate-600">{patient.phone || 'Chưa cập nhật'}</td>
                     <td className="px-6 py-4 text-slate-600">

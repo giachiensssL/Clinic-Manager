@@ -32,6 +32,7 @@ async def list_prescriptions(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     query = select(Prescription).options(
+        selectinload(Prescription.patient),
         selectinload(Prescription.consultation).selectinload(Consultation.patient),
         selectinload(Prescription.consultation).selectinload(Consultation.doctor).selectinload(Doctor.staff),
         selectinload(Prescription.items).selectinload(PrescriptionItem.medicine)
@@ -52,11 +53,15 @@ async def list_prescriptions(
     
     response = []
     for rx in items:
+        p_name = rx.patient.full_name if rx.patient else (
+            rx.consultation.patient.full_name if (rx.consultation and rx.consultation.patient) else "N/A"
+        )
+        d_name = rx.consultation.doctor.staff.full_name if (rx.consultation and rx.consultation.doctor and rx.consultation.doctor.staff) else "Bác sĩ phụ trách"
         response.append({
             "id": rx.id,
             "prescription_code": rx.prescription_code,
-            "patient_name": rx.consultation.patient.full_name if (rx.consultation and rx.consultation.patient) else "N/A",
-            "doctor_name": rx.consultation.doctor.staff.full_name if (rx.consultation and rx.consultation.doctor and rx.consultation.doctor.staff) else "N/A",
+            "patient_name": p_name,
+            "doctor_name": d_name,
             "created_at": rx.created_at.isoformat(),
             "status": "dispensed" if rx.dispensed_at else "pending",
             "items_count": len(rx.items)
@@ -98,6 +103,10 @@ async def create_prescription(
         doc_res = await db.execute(select(Doctor.id).where(Doctor.user_id == current_user.id))
         doctor_id = doc_res.scalar_one_or_none()
 
+    if not doctor_id:
+        first_doc = await db.execute(select(Doctor.id).limit(1))
+        doctor_id = first_doc.scalar_one_or_none()
+
     if not consultation_id:
         if not patient_id:
             raise HTTPException(status_code=400, detail="Cần cung cấp consultation_id hoặc patient_id")
@@ -120,7 +129,7 @@ async def create_prescription(
         if not consultation:
             raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ khám bệnh")
         patient_id = consultation.patient_id
-        doctor_id = consultation.doctor_id
+        doctor_id = consultation.doctor_id or doctor_id
 
     existing = await db.execute(
         select(Prescription).where(Prescription.consultation_id == consultation_id)
@@ -132,7 +141,7 @@ async def create_prescription(
         id=str(uuid.uuid4()),
         prescription_code=_generate_prescription_code(),
         consultation_id=consultation_id,
-        doctor_id=doctor_id or str(uuid.uuid4()),
+        doctor_id=doctor_id,
         patient_id=patient_id,
         notes=payload.notes,
     )

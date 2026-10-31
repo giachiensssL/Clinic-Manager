@@ -14,7 +14,14 @@ import toast from 'react-hot-toast';
 export default function RoomsManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
-  const [rooms, setRooms] = useState(mockRooms);
+  const [rooms, setRooms] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('clinic_rooms');
+      return saved ? JSON.parse(saved) : mockRooms;
+    } catch {
+      return mockRooms;
+    }
+  });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newRoom, setNewRoom] = useState({ id: '', department: '', type: 'Phòng khám' });
   
@@ -38,7 +45,11 @@ export default function RoomsManagement() {
       status: 'Sẵn sàng',
       todayCount: 0,
     };
-    setRooms([created, ...rooms]);
+    const updated = [created, ...rooms];
+    setRooms(updated);
+    try {
+      localStorage.setItem('clinic_rooms', JSON.stringify(updated));
+    } catch {}
     setIsAddOpen(false);
     setNewRoom({ id: '', department: '', type: 'Phòng khám' });
     toast.success('Thêm phòng khám mới thành công!');

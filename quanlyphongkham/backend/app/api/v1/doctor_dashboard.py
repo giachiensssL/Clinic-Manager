@@ -251,26 +251,26 @@ async def get_recent_activity(
 
 @router.get("/patients/search")
 async def search_patients(
-    q: str = Query(..., min_length=1),
-    limit: int = Query(10, ge=1, le=50),
+    q: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_doctor),
 ):
     """Tim kiem benh nhan theo ten, ma BN, so dien thoai"""
-    search_term = f"%{q}%"
-    result = await db.execute(
-        select(Patient)
-        .where(
-            Patient.deleted_at.is_(None),
+    query = select(Patient).where(Patient.deleted_at.is_(None))
+    if q and q.strip():
+        search_term = f"%{q.strip()}%"
+        query = query.where(
             or_(
                 Patient.full_name.ilike(search_term),
                 Patient.patient_code.ilike(search_term),
                 Patient.phone.ilike(search_term),
             )
-        )
-        .order_by(Patient.full_name)
-        .limit(limit)
-    )
+        ).order_by(Patient.full_name)
+    else:
+        query = query.order_by(Patient.created_at.desc())
+
+    result = await db.execute(query.limit(limit))
     patients = result.scalars().all()
 
     items = []

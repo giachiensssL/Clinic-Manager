@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Microscope, FileText, CheckCircle, Search, Filter, X, Plus, Loader2 } from 'lucide-react';
-import { doctorAPI, labResultsAPI } from '@/services/api';
+import { doctorAPI, labResultsAPI, patientsAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function DoctorLabResults() {
@@ -36,7 +36,7 @@ export default function DoctorLabResults() {
 
   useEffect(() => {
     fetchResults();
-    doctorAPI.searchPatients('')
+    patientsAPI.getAll({ size: 100 })
       .then(res => setPatients(res.data.items || []))
       .catch(() => {});
   }, []);
@@ -54,12 +54,27 @@ export default function DoctorLabResults() {
 
     try {
       setCreating(true);
-      await labResultsAPI.create({
+      const res = await labResultsAPI.create({
         patient_id: formData.patient_id,
         test_name: formData.test_name.trim(),
         notes: formData.notes.trim() || `Chỉ định mức độ: ${formData.priority === 'urgent' ? 'Cấp cứu' : 'Bình thường'}`,
         status: 'pending'
       });
+
+      const selectedPatient = patients.find(p => p.id === formData.patient_id);
+      const newLab = {
+        id: res.data?.id || String(Date.now()),
+        test_code: res.data?.test_code || `XN${Math.floor(100000 + Math.random() * 900000)}`,
+        test_name: formData.test_name.trim(),
+        patient_name: selectedPatient ? selectedPatient.full_name : 'Bệnh nhân',
+        doctor_name: 'Bác sĩ phụ trách',
+        test_date: new Date().toISOString(),
+        status: 'pending',
+        priority: formData.priority,
+        notes: formData.notes
+      };
+      setResults(prev => [newLab, ...prev]);
+
       toast.success('Chỉ định xét nghiệm thành công!');
       setIsCreateOpen(false);
       setFormData({
@@ -68,7 +83,7 @@ export default function DoctorLabResults() {
         priority: 'normal',
         notes: ''
       });
-      fetchResults();
+      await fetchResults();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Lỗi khi chỉ định xét nghiệm');
     } finally {

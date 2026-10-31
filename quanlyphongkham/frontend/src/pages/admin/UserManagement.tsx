@@ -32,34 +32,35 @@ export default function UserManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', phone: '', role: 'Bác sĩ' });
 
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const res = await adminAPI.getUsers();
-        if (res.data?.items?.length) {
-          const roleViMap: Record<string, string> = {
-            doctor: 'Bác sĩ',
-            receptionist: 'Lễ tân',
-            accountant: 'Kế toán',
-            admin: 'Admin',
-            patient: 'Bệnh nhân'
-          };
-          const mapped = res.data.items.map((u: any) => ({
-            id: u.id,
-            name: u.fullName || u.username,
-            email: u.email,
-            phone: '09' + Math.floor(10000000 + Math.random() * 90000000),
-            role: roleViMap[u.role] || 'Bác sĩ',
-            status: u.status === 'active' ? 'Đang hoạt động' : 'Bị khóa',
-            lastLogin: u.lastLogin || 'Chưa đăng nhập',
-            registeredAt: 'Gần đây'
-          }));
-          setUsers(mapped);
-        }
-      } catch (e) {
-        // Mock users fallback
+  const loadUsers = async () => {
+    try {
+      const res = await adminAPI.getUsers();
+      if (res.data?.items?.length) {
+        const roleViMap: Record<string, string> = {
+          doctor: 'Bác sĩ',
+          receptionist: 'Lễ tân',
+          accountant: 'Kế toán',
+          admin: 'Admin',
+          patient: 'Bệnh nhân'
+        };
+        const mapped = res.data.items.map((u: any) => ({
+          id: u.id,
+          name: u.fullName || u.username,
+          email: u.email,
+          phone: '09' + Math.floor(10000000 + Math.random() * 90000000),
+          role: roleViMap[u.role] || 'Bác sĩ',
+          status: u.status === 'active' ? 'Đang hoạt động' : 'Bị khóa',
+          lastLogin: u.lastLogin || 'Chưa đăng nhập',
+          registeredAt: 'Gần đây'
+        }));
+        setUsers(mapped);
       }
-    };
+    } catch (e) {
+      // Mock users fallback
+    }
+  };
+
+  useEffect(() => {
     loadUsers();
   }, []);
 
@@ -81,31 +82,33 @@ export default function UserManagement() {
     try {
       setSubmitting(true);
       const username = newUser.email.split('@')[0] || `user_${Date.now()}`;
-      await adminAPI.createUser({
+      const res = await adminAPI.createUser({
         username,
         email: newUser.email,
         fullName: newUser.name,
         role: roleKeyMap[newUser.role] || 'doctor'
       });
-      toast.success('Thêm người dùng thành công và lưu vào cơ sở dữ liệu!');
-    } catch (e) {
-      toast.success('Đã thêm người dùng thành công!');
+      toast.success('Thêm người dùng thành công và đã lưu vào cơ sở dữ liệu!');
+
+      const newU = {
+        id: res.data?.id || 'US' + Math.floor(Math.random() * 10000),
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone || '0987654321',
+        role: newUser.role,
+        status: 'Đang hoạt động',
+        lastLogin: 'Chưa đăng nhập',
+        registeredAt: 'Hôm nay'
+      };
+      setUsers(prev => [newU, ...prev.filter(u => u.id !== newU.id)]);
+      setIsAddUserOpen(false);
+      setNewUser({ name: '', email: '', phone: '', role: 'Bác sĩ' });
+      await loadUsers();
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Lỗi khi tạo người dùng');
     } finally {
       setSubmitting(false);
     }
-
-    setUsers([{
-      id: 'US' + Math.floor(Math.random() * 10000),
-      name: newUser.name,
-      email: newUser.email,
-      phone: newUser.phone || '0987654321',
-      role: newUser.role,
-      status: 'Đang hoạt động',
-      lastLogin: 'Chưa đăng nhập',
-      registeredAt: 'Hôm nay'
-    }, ...users]);
-    setIsAddUserOpen(false);
-    setNewUser({ name: '', email: '', phone: '', role: 'Bác sĩ' });
   };
 
   const filteredUsers = users.filter(u => {

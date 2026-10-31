@@ -246,7 +246,7 @@ async def get_queue_list(db: AsyncSession = Depends(get_db), current_user: User 
             selectinload(Queue.patient),
             selectinload(Queue.doctor).selectinload(Doctor.staff),
             selectinload(Queue.appointment)
-        ).where(func.date(Queue.check_in_time) == today).order_by(Queue.created_at.desc())
+        ).order_by(Queue.created_at.desc()).limit(100)
     )
     items = res.scalars().all()
     return [{

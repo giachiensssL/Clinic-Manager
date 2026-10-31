@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doctorAPI, appointmentsAPI } from '@/services/api';
+import { doctorAPI, appointmentsAPI, patientsAPI } from '@/services/api';
 import { Calendar, Clock, User, Plus, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -21,7 +21,7 @@ export default function DoctorAppointments() {
 
   const fetchAppointments = async () => {
     try {
-      const { data } = await doctorAPI.getTodayAppointments();
+      const { data } = await appointmentsAPI.getAll({ size: 100 });
       setAppointments(data.items || []);
     } catch (error) {
       toast.error('Lỗi khi tải lịch khám');
@@ -36,7 +36,7 @@ export default function DoctorAppointments() {
       .then(res => setDoctorId(res.data.id))
       .catch(() => {});
 
-    doctorAPI.searchPatients('')
+    patientsAPI.getAll({ size: 100 })
       .then(res => setPatients(res.data.items || []))
       .catch(() => {});
   }, []);
@@ -60,7 +60,7 @@ export default function DoctorAppointments() {
       const start_time = `${formData.time}:00`;
       const end_time = `${endH.toString().padStart(2, '0')}:${endM}:00`;
 
-      await appointmentsAPI.create({
+      const res = await appointmentsAPI.create({
         patient_id: formData.patient_id,
         doctor_id: doctorId,
         appointment_date: formData.appointment_date,
@@ -68,6 +68,26 @@ export default function DoctorAppointments() {
         end_time,
         reason: formData.reason.trim() || 'Hẹn tái khám'
       });
+
+      const selectedPatient = patients.find(p => p.id === formData.patient_id);
+      const newApt = {
+        id: res.data?.id || String(Date.now()),
+        appointment_code: res.data?.appointment_code || 'LH-NEW',
+        appointment_date: formData.appointment_date,
+        start_time,
+        end_time,
+        status: 'scheduled',
+        reason: formData.reason,
+        patient: selectedPatient ? {
+          id: selectedPatient.id,
+          full_name: selectedPatient.full_name,
+          patient_code: selectedPatient.patient_code,
+          phone: selectedPatient.phone,
+          gender: selectedPatient.gender,
+          date_of_birth: selectedPatient.date_of_birth
+        } : null
+      };
+      setAppointments(prev => [newApt, ...prev]);
 
       toast.success('Đặt lịch hẹn khám thành công!');
       setIsCreateOpen(false);
@@ -77,7 +97,7 @@ export default function DoctorAppointments() {
         time: '09:00',
         reason: 'Hẹn tái khám định kỳ'
       });
-      fetchAppointments();
+      await fetchAppointments();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Lỗi khi đặt lịch khám');
     } finally {
@@ -164,7 +184,9 @@ export default function DoctorAppointments() {
                           <Clock className="w-4 h-4 text-blue-500" />
                           <span>{apt.start_time?.slice(0,5) || '--:--'} - {apt.end_time?.slice(0,5) || '--:--'}</span>
                         </div>
-                        <div className="text-xs text-slate-500 ml-6">Hôm nay</div>
+                        <div className="text-xs text-slate-500 ml-6">
+                          {apt.appointment_date ? new Date(apt.appointment_date).toLocaleDateString('vi-VN') : 'Hôm nay'}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">

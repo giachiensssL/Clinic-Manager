@@ -76,7 +76,15 @@ async def create_user(
     role_str = data.get("role", "doctor")
     full_name = data.get("fullName", username)
     
-    hashed = get_password_hash("Password123!")
+    if not username:
+        raise HTTPException(status_code=400, detail="Tên đăng nhập là bắt buộc")
+
+    existing = await db.execute(select(User).where((User.username == username) | (User.email == email)))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Tên đăng nhập hoặc Email này đã tồn tại trong hệ thống")
+
+    raw_pwd = data.get("password") or "Password123!"
+    hashed = get_password_hash(raw_pwd)
     
     new_user = User(
         username=username,
@@ -89,12 +97,13 @@ async def create_user(
     await db.commit()
     await db.refresh(new_user)
     
+    from datetime import date
     if role_str == "patient":
         new_patient = Patient(
             user_id=new_user.id,
             full_name=full_name,
             patient_code=f"BN{new_user.id[:6].upper()}",
-            date_of_birth="2000-01-01",
+            date_of_birth=date(2000, 1, 1),
             gender="male"
         )
         db.add(new_patient)
@@ -105,9 +114,33 @@ async def create_user(
             staff_code=f"NV{new_user.id[:6].upper()}"
         )
         db.add(new_staff)
+        await db.flush()
+
+        if role_str == "doctor":
+            from app.models.models import Doctor, Specialty, Department
+            spec = (await db.execute(select(Specialty.id).limit(1))).scalar_one_or_none()
+            dept = (await db.execute(select(Department.id).limit(1))).scalar_one_or_none()
+            if spec and dept:
+                doc = Doctor(
+                    staff_id=new_staff.id,
+                    department_id=dept,
+                    specialty_id=spec,
+                    license_number=f"BS-{new_user.id[:6].upper()}",
+                    qualification="Bác sĩ chuyên khoa",
+                    consultation_fee=150000.0,
+                )
+                db.add(doc)
         
     await db.commit()
-    return {"id": new_user.id}
+    return {
+        "id": new_user.id,
+        "username": new_user.username,
+        "email": new_user.email,
+        "fullName": full_name,
+        "role": new_user.role.value,
+        "status": "active",
+        "lastLogin": "—"
+    }
 
 @router.put("/users/{id}/status")
 async def toggle_status(

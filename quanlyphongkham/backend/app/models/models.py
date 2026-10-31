@@ -446,6 +446,7 @@ class Prescription(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     consultation: Mapped["Consultation"] = relationship("Consultation", back_populates="prescription")
+    patient: Mapped["Patient"] = relationship("Patient")
     items: Mapped[List["PrescriptionItem"]] = relationship("PrescriptionItem", back_populates="prescription")
 
 

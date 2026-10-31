@@ -12,7 +12,14 @@ import toast from 'react-hot-toast';
 
 export default function DepartmentsManagement() {
   const [search, setSearch] = useState('');
-  const [departments, setDepartments] = useState(mockDepartments);
+  const [departments, setDepartments] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('clinic_departments');
+      return saved ? JSON.parse(saved) : mockDepartments;
+    } catch {
+      return mockDepartments;
+    }
+  });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newDept, setNewDept] = useState({ name: '', code: '' });
   
@@ -35,7 +42,11 @@ export default function DepartmentsManagement() {
       todayAppointments: 0,
       status: 'Hoạt động'
     };
-    setDepartments([created, ...departments]);
+    const updated = [created, ...departments];
+    setDepartments(updated);
+    try {
+      localStorage.setItem('clinic_departments', JSON.stringify(updated));
+    } catch {}
     setIsAddOpen(false);
     setNewDept({ name: '', code: '' });
     toast.success('Thêm Khoa mới thành công!');

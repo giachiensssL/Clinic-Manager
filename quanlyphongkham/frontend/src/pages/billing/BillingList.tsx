@@ -102,6 +102,7 @@ export default function BillingList() {
 
       toast.success(`Tạo hóa đơn thành công! Mã: ${res.data.invoice_code}`);
       qc.invalidateQueries({ queryKey: ['billing'] });
+      qc.refetchQueries({ queryKey: ['billing'] });
       setIsCreateOpen(false);
       setCreateForm({
         patient_id: '',
@@ -239,8 +240,8 @@ export default function BillingList() {
                     <tr key={b.id} className="hover:bg-slate-50 :bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3 font-mono font-medium text-slate-900 ">{b.invoice_code}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900 ">{b.patient?.full_name ?? 'N/A'}</div>
-                        <div className="text-xs text-slate-400">{b.patient?.patient_code}</div>
+                        <div className="font-medium text-slate-900 ">{b.patient?.full_name || (b as any).patient_name || 'N/A'}</div>
+                        <div className="text-xs text-slate-400">{b.patient?.patient_code || ''}</div>
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-900 ">{formatCurrency(b.total_amount)}</td>
                       <td className="px-4 py-3 text-red-600 font-medium">
