@@ -8,22 +8,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Search, Plus, Edit2, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockDepartments } from '@/mock/adminData';
+import toast from 'react-hot-toast';
 
 export default function DepartmentsManagement() {
   const [search, setSearch] = useState('');
+  const [departments, setDepartments] = useState(mockDepartments);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newDept, setNewDept] = useState({ name: '', code: '' });
   
-  const filteredData = mockDepartments.filter(d => 
+  const filteredData = departments.filter(d => 
     d.name.toLowerCase().includes(search.toLowerCase()) || 
     d.id.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newDept.name.trim() || !newDept.code.trim()) {
+      toast.error('Vui lòng nhập đầy đủ thông tin');
+      return;
+    }
+    const created = {
+      id: newDept.code.toUpperCase(),
+      name: newDept.name,
+      doctorCount: 1,
+      roomCount: 1,
+      todayAppointments: 0,
+      status: 'Hoạt động'
+    };
+    setDepartments([created, ...departments]);
     setIsAddOpen(false);
     setNewDept({ name: '', code: '' });
-    alert('Thêm khoa thành công');
+    toast.success('Thêm Khoa mới thành công!');
   };
 
   return (
@@ -105,7 +120,14 @@ export default function DepartmentsManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" title="Chỉnh sửa"><Edit2 className="w-4 h-4 text-blue-600" /></Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          title="Chỉnh sửa"
+                          onClick={() => toast.success(`Đang mở chỉnh sửa khoa ${d.name}`)}
+                        >
+                          <Edit2 className="w-4 h-4 text-blue-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

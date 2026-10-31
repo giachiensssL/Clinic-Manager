@@ -64,7 +64,7 @@ export default function PatientDashboard() {
   const latestRx = prescriptions[0];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-10">
+    <div className="space-y-6 w-full pb-10">
       
       {/* Welcome Section */}
       <div className="flex flex-col md:flex-row gap-6">

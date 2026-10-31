@@ -115,6 +115,7 @@ function App() {
           <Route path="ai" element={<DoctorAIAssistant />} />
           <Route path="notifications" element={<DoctorNotifications />} />
           <Route path="settings" element={<DoctorSettings />} />
+          <Route path="profile" element={<DoctorSettings />} />
           <Route path="reports" element={<DoctorReports />} />
         </Route>
 

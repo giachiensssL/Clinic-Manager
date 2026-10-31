@@ -43,12 +43,14 @@ export const authAPI = {
   login: (data: any) => api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
+  changePassword: (data: { current_password: string; new_password: string }) => api.post('/auth/change-password', data),
 };
 
 export const patientsAPI = {
   getAll: (params?: any) => api.get('/patients', { params }),
   getById: (id: string) => api.get(`/patients/${id}`),
   getMe: () => api.get('/patients/me'),
+  updateMe: (data: any) => api.put('/patients/me', data),
   create: (data: any) => api.post('/patients', data),
   update: (id: string, data: any) => api.put(`/patients/${id}`, data),
   delete: (id: string) => api.delete(`/patients/${id}`),

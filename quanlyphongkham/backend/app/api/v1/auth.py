@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, hash_password
 from app.core.deps import get_current_user
 from app.models.models import User, Staff, Patient, AuditAction, UserRole
-from app.schemas.auth import LoginRequest, Token, RefreshRequest, UserInfo, RegisterRequest
+from app.schemas.auth import LoginRequest, Token, RefreshRequest, UserInfo, RegisterRequest, ChangePasswordRequest
 from app.services.audit_service import log_action
 
 router = APIRouter()
@@ -145,3 +145,21 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     await db.commit()
     
     return {"message": "Đăng ký thành công"}
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Đổi mật khẩu cho người dùng hiện tại"""
+    is_valid = await asyncio.to_thread(verify_password, payload.current_password, current_user.hashed_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Mật khẩu hiện tại không chính xác")
+        
+    current_user.hashed_password = await asyncio.to_thread(hash_password, payload.new_password)
+    await log_action(db, current_user, AuditAction.UPDATE, "auth", current_user.id, "Đổi mật khẩu thành công")
+    await db.commit()
+    return {"message": "Đổi mật khẩu thành công"}
+

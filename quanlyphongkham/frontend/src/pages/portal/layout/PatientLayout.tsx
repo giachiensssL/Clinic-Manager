@@ -40,7 +40,7 @@ export default function PatientLayout() {
           "flex-1 min-h-0 min-w-0 flex flex-col",
           location.pathname.includes('/ai') ? "overflow-hidden p-2 sm:p-3" : "overflow-y-auto p-4 md:p-6 lg:p-8"
         )}>
-          <div className={cn("h-full", location.pathname.includes('/ai') ? "w-full flex-1 min-h-0 flex flex-col" : "mx-auto max-w-7xl")}>
+          <div className={cn("h-full w-full", location.pathname.includes('/ai') ? "flex-1 min-h-0 flex flex-col" : "flex-1 flex flex-col")}>
             <Outlet />
           </div>
         </main>

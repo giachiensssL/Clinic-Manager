@@ -86,7 +86,7 @@ export default function DoctorNotifications() {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 w-full">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

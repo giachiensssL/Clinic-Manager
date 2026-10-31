@@ -118,7 +118,7 @@ export default function PatientAppointmentCreate() {
     : doctors;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="w-full space-y-6 pb-20">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#E2E8F0]">
         <h1 className="text-2xl font-bold text-[#0B3B78] mb-1">Đặt lịch khám mới</h1>
         <p className="text-sm text-[#64748B]">Vui lòng làm theo các bước dưới đây để đặt lịch khám.</p>

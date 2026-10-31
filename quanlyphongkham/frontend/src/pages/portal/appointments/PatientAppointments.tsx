@@ -83,7 +83,7 @@ export default function PatientAppointments() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-[#E2E8F0]">
         <div>
           <h1 className="text-2xl font-bold text-[#0B3B78] mb-1">Lịch hẹn của tôi</h1>

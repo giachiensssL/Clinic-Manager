@@ -130,7 +130,7 @@ export default function DoctorEMR() {
 
   if (!appointmentId) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 lg:p-8 space-y-6 w-full">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Bệnh án điện tử (EMR)</h1>
           <p className="text-sm text-slate-500 mt-1">Chọn một ca khám để xem hoặc tạo bệnh án</p>
@@ -189,7 +189,7 @@ export default function DoctorEMR() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 w-full">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Hồ sơ bệnh án điện tử (EMR)</h1>

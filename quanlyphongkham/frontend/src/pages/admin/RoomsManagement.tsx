@@ -9,14 +9,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Search, Plus, Edit2, DoorOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockRooms, mockDepartments } from '@/mock/adminData';
+import toast from 'react-hot-toast';
 
 export default function RoomsManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
+  const [rooms, setRooms] = useState(mockRooms);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newRoom, setNewRoom] = useState({ id: '', department: '', type: 'Phòng khám' });
   
-  const filteredData = mockRooms.filter(r => {
+  const filteredData = rooms.filter(r => {
     const matchSearch = r.id.toLowerCase().includes(search.toLowerCase()) || r.staff.toLowerCase().includes(search.toLowerCase());
     const matchDept = deptFilter === 'all' || r.department === deptFilter;
     return matchSearch && matchDept;
@@ -24,9 +26,22 @@ export default function RoomsManagement() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newRoom.id.trim() || !newRoom.department.trim()) {
+      toast.error('Vui lòng nhập đầy đủ mã phòng và chuyên khoa');
+      return;
+    }
+    const created = {
+      id: newRoom.id,
+      department: newRoom.department,
+      type: newRoom.type,
+      staff: 'Chưa phân công',
+      status: 'Sẵn sàng',
+      todayCount: 0,
+    };
+    setRooms([created, ...rooms]);
     setIsAddOpen(false);
     setNewRoom({ id: '', department: '', type: 'Phòng khám' });
-    alert('Thêm phòng thành công');
+    toast.success('Thêm phòng khám mới thành công!');
   };
 
   return (
@@ -143,7 +158,14 @@ export default function RoomsManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" title="Chỉnh sửa"><Edit2 className="w-4 h-4 text-blue-600" /></Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          title="Chỉnh sửa"
+                          onClick={() => toast.success(`Đang mở chỉnh sửa thông tin phòng ${r.id}`)}
+                        >
+                          <Edit2 className="w-4 h-4 text-blue-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

@@ -28,7 +28,7 @@ export default function DoctorPatientProfile() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-6 flex flex-col items-center justify-center min-h-[400px]">
+      <div className="w-full p-6 flex flex-col items-center justify-center min-h-[400px]">
         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="text-slate-500">Đang tải hồ sơ bệnh nhân...</p>
       </div>
@@ -37,7 +37,7 @@ export default function DoctorPatientProfile() {
 
   if (!patient) {
     return (
-      <div className="max-w-4xl mx-auto p-6 text-center">
+      <div className="w-full p-6 text-center">
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Không tìm thấy bệnh nhân</h2>
         <button onClick={() => navigate('/doctor/patients')} className="text-blue-600 hover:underline">
           Quay lại danh sách
@@ -47,7 +47,7 @@ export default function DoctorPatientProfile() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 w-full">
       <div className="flex items-center gap-4 mb-2">
         <button 
           onClick={() => navigate('/doctor/patients')}

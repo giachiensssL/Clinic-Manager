@@ -9,26 +9,52 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Search, Plus, Calendar, Clock, Edit2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockSchedules, mockDepartments, mockStaff, mockRooms } from '@/mock/adminData';
+import toast from 'react-hot-toast';
 
 export default function SchedulesManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('2026-09-17'); // Demo date
+  const [schedules, setSchedules] = useState(mockSchedules);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newSchedule, setNewSchedule] = useState({ doctor: '', department: '', room: '', shift: 'Sáng (08:00 - 12:00)' });
 
-  const filteredData = mockSchedules.filter(s => {
+  const filteredData = schedules.filter(s => {
     const matchSearch = s.doctor.toLowerCase().includes(search.toLowerCase()) || s.room.toLowerCase().includes(search.toLowerCase());
     const matchDept = deptFilter === 'all' || s.department === deptFilter;
     const matchDate = s.date === dateFilter;
     return matchSearch && matchDept && matchDate;
   });
 
+  const handleAutoAssign = () => {
+    setIsOptimizing(true);
+    setTimeout(() => {
+      setIsOptimizing(false);
+      toast.success('AI đã tự động phân bổ ca trực tối ưu cho toàn bộ bác sĩ trong tuần!');
+    }, 1000);
+  };
+
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newSchedule.doctor.trim() || !newSchedule.department.trim() || !newSchedule.room.trim()) {
+      toast.error('Vui lòng nhập đầy đủ thông tin ca làm việc');
+      return;
+    }
+    const created = {
+      id: 'SCH' + (Math.floor(Math.random() * 900) + 100),
+      doctor: newSchedule.doctor,
+      department: newSchedule.department,
+      room: newSchedule.room,
+      shift: newSchedule.shift,
+      date: dateFilter,
+      appointments: 0,
+      status: 'Bình thường'
+    };
+    setSchedules([created, ...schedules]);
     setIsAddOpen(false);
     setNewSchedule({ doctor: '', department: '', room: '', shift: 'Sáng (08:00 - 12:00)' });
-    alert('Thêm lịch thành công');
+    toast.success('Tạo lịch làm việc mới thành công!');
   };
 
   return (
@@ -39,7 +65,14 @@ export default function SchedulesManagement() {
           <p className="text-sm text-slate-500 mt-1">Sắp xếp lịch trực và làm việc của nhân sự</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="border-[#1e3a5f] text-[#1e3a5f]">Phân ca tự động (AI)</Button>
+          <Button 
+            variant="outline" 
+            disabled={isOptimizing}
+            onClick={handleAutoAssign}
+            className="border-[#1e3a5f] text-[#1e3a5f]"
+          >
+            {isOptimizing ? 'AI đang phân ca...' : 'Phân ca tự động (AI)'}
+          </Button>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button className="bg-[#1e3a5f] hover:bg-[#152943]">
@@ -164,7 +197,14 @@ export default function SchedulesManagement() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" title="Sửa đổi"><Edit2 className="w-4 h-4 text-blue-600" /></Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              title="Sửa đổi"
+                              onClick={() => toast.success(`Đang mở điều chỉnh ca trực của ${s.doctor}`)}
+                            >
+                              <Edit2 className="w-4 h-4 text-blue-600" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))

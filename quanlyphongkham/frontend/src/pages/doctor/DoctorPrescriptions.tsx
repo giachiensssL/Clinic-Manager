@@ -45,7 +45,7 @@ export default function DoctorPrescriptions() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 relative">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 relative w-full">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Quản lý Đơn thuốc</h1>

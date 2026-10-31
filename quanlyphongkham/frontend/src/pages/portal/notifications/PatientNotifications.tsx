@@ -62,7 +62,7 @@ export default function PatientNotifications() {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-[#E2E8F0]">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">

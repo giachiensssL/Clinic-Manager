@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Plus, Edit2, Lock, Unlock, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockUsers } from '@/mock/adminData';
+import toast from 'react-hot-toast';
 
 const roleBadge: Record<string, string> = {
   'Admin': 'bg-red-100 text-red-700',
@@ -223,8 +224,22 @@ export default function UserManagement() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Chỉnh sửa"><Edit2 className="w-4 h-4 text-blue-600" /></Button>
-                          <Button variant="ghost" size="icon" title="Đặt lại mật khẩu"><KeyRound className="w-4 h-4 text-amber-600" /></Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            title="Chỉnh sửa"
+                            onClick={() => toast.success(`Đang mở chỉnh sửa tài khoản ${u.name}`)}
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            title="Đặt lại mật khẩu"
+                            onClick={() => toast.success(`Đã gửi liên kết đặt lại mật khẩu đến email: ${u.email}`)}
+                          >
+                            <KeyRound className="w-4 h-4 text-amber-600" />
+                          </Button>
                           <Button 
                             variant="ghost" size="icon" title={u.status === 'Bị khóa' ? 'Mở khóa' : 'Khóa'}
                             onClick={() => setConfirmLockId(u.id)}

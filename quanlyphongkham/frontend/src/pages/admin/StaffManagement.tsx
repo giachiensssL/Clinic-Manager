@@ -9,30 +9,45 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Search, Filter, Plus, Edit2, UserCheck, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockStaff } from '@/mock/adminData';
+import toast from 'react-hot-toast';
 
 export default function StaffManagement() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
+  const [staffList, setStaffList] = useState(mockStaff);
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
-  const [newStaff, setNewStaff] = useState({ name: '', position: '', department: '', email: '' });
+  const [newStaff, setNewStaff] = useState({ name: '', position: '', department: '', email: '', phone: '' });
   
-  const filteredStaff = mockStaff.filter(s => 
+  const filteredStaff = staffList.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) || 
     s.id.toLowerCase().includes(search.toLowerCase()) ||
     s.department.toLowerCase().includes(search.toLowerCase())
   );
 
   const stats = {
-    total: mockStaff.length,
-    doctors: mockStaff.filter(s => s.position.includes('Bác sĩ') || s.position.includes('Trưởng khoa')).length,
-    reception: mockStaff.filter(s => s.position.includes('lễ tân')).length,
-    others: mockStaff.filter(s => !s.position.includes('Bác sĩ') && !s.position.includes('Trưởng khoa') && !s.position.includes('lễ tân')).length,
+    total: staffList.length,
+    doctors: staffList.filter(s => s.position.includes('Bác sĩ') || s.position.includes('Trưởng khoa')).length,
+    reception: staffList.filter(s => s.position.includes('lễ tân')).length,
+    others: staffList.filter(s => !s.position.includes('Bác sĩ') && !s.position.includes('Trưởng khoa') && !s.position.includes('lễ tân')).length,
   };
 
   const handleAddStaff = (e: React.FormEvent) => {
     e.preventDefault();
+    const created = {
+      id: 'NV' + (Math.floor(Math.random() * 900) + 100),
+      name: newStaff.name,
+      position: newStaff.position,
+      department: newStaff.department,
+      phone: newStaff.phone || '09' + Math.floor(10000000 + Math.random() * 90000000),
+      email: newStaff.email,
+      joinDate: new Date().toLocaleDateString('vi-VN'),
+      status: 'Đang làm việc',
+      hasAccount: false
+    };
+    setStaffList([created, ...staffList]);
     setIsAddStaffOpen(false);
-    setNewStaff({ name: '', position: '', department: '', email: '' });
+    setNewStaff({ name: '', position: '', department: '', email: '', phone: '' });
+    toast.success('Thêm nhân viên mới thành công!');
   };
 
   return (
@@ -144,7 +159,14 @@ export default function StaffManagement() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" title="Chỉnh sửa"><Edit2 className="w-4 h-4 text-blue-600" /></Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          title="Chỉnh sửa"
+                          onClick={() => toast.success(`Đang mở chỉnh sửa hồ sơ nhân viên ${s.name}`)}
+                        >
+                          <Edit2 className="w-4 h-4 text-blue-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

@@ -121,6 +121,36 @@ async def get_my_patient_profile(
     return PatientDetail.model_validate(patient)
 
 
+@router.put("/me", response_model=PatientResponse)
+async def update_my_patient_profile(
+    payload: PatientUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Bệnh nhân cập nhật hồ sơ cá nhân của chính mình"""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Chỉ bệnh nhân mới có hồ sơ này")
+        
+    result = await db.execute(
+        select(Patient).where(Patient.user_id == current_user.id, Patient.deleted_at.is_(None))
+    )
+    patient = result.scalar_one_or_none()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ bệnh nhân của bạn")
+
+    update_dict = payload.model_dump(exclude_unset=True)
+    # Prevent changing is_active by patient self
+    update_dict.pop("is_active", None)
+
+    for field, value in update_dict.items():
+        setattr(patient, field, value)
+
+    await log_action(db, current_user, AuditAction.UPDATE, "patients", patient.id, "Bệnh nhân tự cập nhật hồ sơ")
+    await db.commit()
+    await db.refresh(patient)
+    return PatientResponse.model_validate(patient)
+
+
 @router.get("/{patient_id}", response_model=PatientDetail)
 async def get_patient(
     patient_id: str,
