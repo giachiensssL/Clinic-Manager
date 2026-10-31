@@ -48,17 +48,25 @@ export default function DoctorPatientProfile() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6 w-full">
-      <div className="flex items-center gap-4 mb-2">
-        <button 
-          onClick={() => navigate('/doctor/patients')}
-          className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-slate-600" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Hồ sơ bệnh nhân</h1>
-          <p className="text-sm text-slate-500 mt-1">Mã BN: <span className="font-medium text-slate-700">{patient.patient_code}</span></p>
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => navigate('/doctor/patients')}
+            className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Hồ sơ bệnh nhân</h1>
+            <p className="text-sm text-slate-500 mt-1">Mã BN: <span className="font-medium text-slate-700">{patient.patient_code}</span></p>
+          </div>
         </div>
+        <button
+          onClick={() => navigate(`/doctor/prescriptions?patientId=${patient.id}`)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm shadow-sm transition-colors"
+        >
+          <Pill className="w-4 h-4" /> Kê đơn thuốc
+        </button>
       </div>
 
       {/* THÔNG TIN HÀNH CHÍNH */}

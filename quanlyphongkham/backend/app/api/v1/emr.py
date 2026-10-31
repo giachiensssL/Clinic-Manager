@@ -16,7 +16,8 @@ from app.core.database import get_db
 from app.core.deps import get_doctor, get_current_user, get_clinical_doctor
 from app.models.models import (
     Consultation, EMRStatus, Appointment, AppointmentStatus,
-    ConsultationDiagnosis, Diagnosis, User, AuditAction, Doctor
+    ConsultationDiagnosis, Diagnosis, User, AuditAction, Doctor,
+    Prescription, PrescriptionItem
 )
 from app.services.audit_service import log_action
 
@@ -93,7 +94,7 @@ async def get_consultation(
         select(Consultation)
         .options(
             selectinload(Consultation.diagnoses).selectinload(ConsultationDiagnosis.diagnosis),
-            selectinload(Consultation.prescription),
+            selectinload(Consultation.prescription).selectinload(Prescription.items).selectinload(PrescriptionItem.medicine),
         )
         .where(Consultation.id == consultation_id)
     )
@@ -141,6 +142,29 @@ async def get_consultation(
             }
             for d in c.diagnoses
         ],
+        "prescription": {
+            "id": c.prescription.id,
+            "prescription_code": c.prescription.prescription_code,
+            "notes": c.prescription.notes,
+            "dispensed_at": c.prescription.dispensed_at.isoformat() if c.prescription.dispensed_at else None,
+            "items": [
+                {
+                    "id": item.id,
+                    "medicine_id": item.medicine_id,
+                    "medicine_name": item.medicine.name if item.medicine else None,
+                    "generic_name": item.medicine.generic_name if item.medicine else None,
+                    "dosage": item.dosage,
+                    "frequency": item.frequency,
+                    "duration_days": item.duration_days,
+                    "quantity": item.quantity,
+                    "instructions": item.instructions,
+                    "unit_price": item.unit_price,
+                    "subtotal": item.quantity * item.unit_price,
+                }
+                for item in c.prescription.items
+            ] if c.prescription and c.prescription.items else [],
+            "total_price": sum(item.quantity * item.unit_price for item in c.prescription.items) if (c.prescription and c.prescription.items) else 0,
+        } if c.prescription else None,
         "signed_by": c.signed_by,
         "signed_at": c.signed_at.isoformat() if c.signed_at else None,
         "locked_at": c.locked_at.isoformat() if c.locked_at else None,

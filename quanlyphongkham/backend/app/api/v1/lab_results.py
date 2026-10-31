@@ -1,5 +1,5 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -78,17 +78,31 @@ async def get_lab_result(
     
     return resp
 
+from typing import Optional
 from app.models.models import LabResultStatus
+
+class LabResultStatusUpdate(BaseModel):
+    status: Optional[str] = None
+    new_status: Optional[str] = None
 
 @router.patch("/{result_id}/status")
 async def update_lab_result_status(
     result_id: str,
-    new_status: str,
+    payload: Optional[LabResultStatusUpdate] = Body(None),
+    new_status: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN, UserRole.RECEPTIONIST]:
         raise HTTPException(status_code=403, detail="Không có quyền cập nhật trạng thái")
+
+    status_val = None
+    if payload:
+        status_val = payload.status or payload.new_status
+    if not status_val and new_status:
+        status_val = new_status
+    if not status_val:
+        raise HTTPException(status_code=400, detail="Thiếu trạng thái mới (status)")
 
     query = select(LabResult).where(LabResult.id == result_id, LabResult.deleted_at.is_(None))
     result = await db.execute(query)
@@ -98,12 +112,12 @@ async def update_lab_result_status(
         raise HTTPException(status_code=404, detail="Không tìm thấy kết quả xét nghiệm")
     
     try:
-        lab_result.status = LabResultStatus(new_status)
+        lab_result.status = LabResultStatus(status_val)
     except ValueError:
         raise HTTPException(status_code=400, detail="Trạng thái không hợp lệ")
         
     await db.commit()
-    return {"message": "Đã cập nhật trạng thái"}
+    return {"message": "Đã cập nhật trạng thái", "status": lab_result.status.value}
 
 
 @router.post("", response_model=LabResultResponse, status_code=201)
@@ -122,7 +136,9 @@ async def create_lab_result(
     # Resolve doctor_id if not explicitly provided
     doc_id = payload.doctor_id
     if not doc_id and current_user.role == UserRole.DOCTOR:
-        doc_res = await db.execute(select(Doctor.id).where(Doctor.user_id == current_user.id))
+        doc_res = await db.execute(
+            select(Doctor.id).join(Staff, Doctor.staff_id == Staff.id).where(Staff.user_id == current_user.id)
+        )
         doc_id = doc_res.scalar_one_or_none()
 
     test_code = payload.test_code or f"XN{random.randint(100000, 999999)}"

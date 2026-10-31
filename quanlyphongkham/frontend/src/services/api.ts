@@ -66,6 +66,7 @@ export const doctorsAPI = {
   getAll: (params?: any) => api.get('/doctors', { params }),
   getById: (id: string) => api.get(`/doctors/${id}`),
   getSlots: (id: string, date: string) => api.get(`/doctors/${id}/slots`, { params: { date } }),
+  getSpecialties: () => api.get('/doctors/specialties'),
 };
 
 export const emrAPI = {
@@ -83,6 +84,8 @@ export const prescriptionsAPI = {
   create: (data: any) => api.post('/prescriptions', data),
   addItem: (id: string, data: any) => api.post(`/prescriptions/${id}/items`, data),
   dispense: (id: string) => api.post(`/prescriptions/${id}/dispense`),
+  getMedicines: (params?: { q?: string; limit?: number }) => api.get('/prescriptions/medicines', { params }),
+  checkInteractions: (payload: { medicine_names: string[]; patient_id?: string }) => api.post('/prescriptions/check-interactions', payload),
 };
 
 export const billingAPI = {

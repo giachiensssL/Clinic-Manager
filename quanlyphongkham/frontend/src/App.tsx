@@ -20,6 +20,7 @@ const BillingDetail = lazy(() => import('./pages/billing/BillingDetail'));
 const Reports = lazy(() => import('./pages/reports/Reports'));
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const AIAdminWorkspace = lazy(() => import('./pages/admin/AIAdminWorkspace'));
+const AISecurityCenter = lazy(() => import('./pages/admin/AISecurityCenter'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const RolesManagement = lazy(() => import('./pages/admin/RolesManagement'));
 const StaffManagement = lazy(() => import('./pages/admin/StaffManagement'));
@@ -123,9 +124,11 @@ function App() {
         <Route path="/portal" element={<ProtectedRoute roles={['patient']}><PatientLayout /></ProtectedRoute>}>
           <Route index element={<PatientDashboard />} />
           <Route path="appointments" element={<PatientAppointments />} />
+          <Route path="appointments/:id" element={<PatientAppointments />} />
           <Route path="appointments/create" element={<PatientAppointmentCreate />} />
           <Route path="health-record" element={<PatientHealthRecord />} />
           <Route path="prescriptions" element={<PatientPrescriptions />} />
+          <Route path="prescriptions/:id" element={<PatientPrescriptions />} />
           <Route path="lab-results" element={<PatientLabResults />} />
           <Route path="payments" element={<PatientPayments />} />
           <Route path="ai-assistant" element={<PatientAIAssistant />} />
@@ -185,6 +188,8 @@ function App() {
           {/* Admin */}
           <Route path="admin/audit-logs" element={<ProtectedRoute roles={['admin']}><AuditLogs /></ProtectedRoute>} />
           <Route path="admin/ai" element={<ProtectedRoute roles={['admin']}><AIAdminWorkspace /></ProtectedRoute>} />
+          <Route path="admin/security-center" element={<ProtectedRoute roles={['admin']}><AISecurityCenter /></ProtectedRoute>} />
+          <Route path="admin/ai-security" element={<ProtectedRoute roles={['admin']}><AISecurityCenter /></ProtectedRoute>} />
           <Route path="admin/users" element={<ProtectedRoute roles={['admin']}><UserManagement /></ProtectedRoute>} />
           <Route path="admin/roles" element={<ProtectedRoute roles={['admin']}><RolesManagement /></ProtectedRoute>} />
           <Route path="admin/staff" element={<ProtectedRoute roles={['admin']}><StaffManagement /></ProtectedRoute>} />

@@ -1,9 +1,7 @@
 """
 Receptionist Module API
 """
-import time
-import random
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, time as dt_time
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,8 +132,11 @@ async def create_appointment(data: CreateAppointmentDTO, db: AsyncSession = Depe
     if not pat: raise HTTPException(400, "Patient not found")
     
     h, m = map(int, data.time.split(":"))
-    st = time(h, m)
-    et = time(h, m+30) if m == 0 else time(h+1, 0)
+    st = dt_time(h, m)
+    total_minutes = h * 60 + m + 30
+    end_h = (total_minutes // 60) % 24
+    end_m = total_minutes % 60
+    et = dt_time(end_h, end_m)
     
     apt = Appointment(
         appointment_code=f"LH-{uuid.uuid4().hex[:6].upper()}",

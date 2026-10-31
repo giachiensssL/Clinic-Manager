@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { FileText, Save, CheckCircle, AlertTriangle, Activity, Pill, History, User } from 'lucide-react';
-import { emrAPI, patientsAPI, appointmentsAPI, doctorAPI } from '@/services/api';
+import { FileText, Save, CheckCircle, AlertTriangle, Activity, Pill, History, User, PlusCircle, Trash2, Sparkles, X, Loader2, ShieldCheck } from 'lucide-react';
+import { emrAPI, patientsAPI, appointmentsAPI, doctorAPI, prescriptionsAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function DoctorEMR() {
@@ -15,6 +15,26 @@ export default function DoctorEMR() {
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('DRAFT');
   const [history, setHistory] = useState<any[]>([]);
+
+  // Prescription State inside EMR
+  const [prescription, setPrescription] = useState<any>(null);
+  const [isPrescribeOpen, setIsPrescribeOpen] = useState(false);
+  const [catalogMedicines, setCatalogMedicines] = useState<any[]>([]);
+  const [activeSuggestionRow, setActiveSuggestionRow] = useState<number | null>(null);
+  const [prescribing, setPrescribing] = useState(false);
+  const [checkingInteractions, setCheckingInteractions] = useState(false);
+  const [interactionResult, setInteractionResult] = useState<{
+    risk_level: 'safe' | 'warning' | 'danger';
+    warnings: string[];
+    recommendations: string[];
+  } | null>(null);
+
+  const [prescriptionForm, setPrescriptionForm] = useState({
+    notes: '',
+    items: [
+      { medicine_name: 'Paracetamol 500mg', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau khi ăn', unit_price: 2000 }
+    ]
+  });
 
   const [emrData, setEmrData] = useState({
     chief_complaint: '',
@@ -47,6 +67,7 @@ export default function DoctorEMR() {
             clinical_notes: data.clinical_notes || '',
             treatment_plan: data.treatment_plan || '',
           });
+          setPrescription(data.prescription || null);
         } catch (err: any) {
           if (err.response?.status === 404) {
             // Chưa có, tạo mới
@@ -81,6 +102,101 @@ export default function DoctorEMR() {
     };
     initEMR();
   }, [appointmentId]);
+
+  useEffect(() => {
+    prescriptionsAPI.getMedicines({ limit: 100 })
+      .then(res => setCatalogMedicines(res.data.items || []))
+      .catch(() => {});
+  }, []);
+
+  const handleAddItem = () => {
+    setPrescriptionForm(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { medicine_name: '', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau khi ăn', unit_price: 5000 }
+      ]
+    }));
+  };
+
+  const handleRemoveItem = (index: number) => {
+    if (prescriptionForm.items.length <= 1) {
+      toast.error('Đơn thuốc phải có ít nhất 1 loại thuốc');
+      return;
+    }
+    setPrescriptionForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleItemChange = (index: number, field: string, value: any) => {
+    setPrescriptionForm(prev => ({
+      ...prev,
+      items: prev.items.map((it, i) => i === index ? { ...it, [field]: value } : it)
+    }));
+  };
+
+  const handleCheckInteractions = async () => {
+    const medNames = prescriptionForm.items.map(it => it.medicine_name.trim()).filter(Boolean);
+    if (medNames.length === 0) {
+      toast.error('Vui lòng nhập tên thuốc');
+      return;
+    }
+    try {
+      setCheckingInteractions(true);
+      const res = await prescriptionsAPI.checkInteractions({
+        medicine_names: medNames,
+        patient_id: patient?.id,
+      });
+      setInteractionResult(res.data);
+      if (res.data.risk_level === 'safe') {
+        toast.success('Đơn thuốc an toàn!');
+      } else if (res.data.risk_level === 'warning') {
+        toast('Cảnh báo tương tác cần lưu ý!', { icon: '⚠️' });
+      } else {
+        toast.error('CẢNH BÁO NGUY HIỂM: Có nguy cơ dị ứng hoặc chống chỉ định!');
+      }
+    } catch {
+      toast.error('Lỗi khi kiểm tra tương tác');
+    } finally {
+      setCheckingInteractions(false);
+    }
+  };
+
+  const handleSavePrescription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!consultationId || !patient) return;
+    const invalidItem = prescriptionForm.items.find(it => !it.medicine_name.trim());
+    if (invalidItem) {
+      toast.error('Vui lòng nhập tên thuốc cho tất cả các dòng');
+      return;
+    }
+
+    try {
+      setPrescribing(true);
+      const res = await prescriptionsAPI.create({
+        consultation_id: consultationId,
+        patient_id: patient.id,
+        notes: prescriptionForm.notes.trim() || 'Kê đơn theo phác đồ khám bệnh',
+        items: prescriptionForm.items
+      });
+      
+      const cRes = await emrAPI.getConsultation(consultationId);
+      setPrescription(cRes.data.prescription || {
+        prescription_code: res.data.prescription_code,
+        notes: prescriptionForm.notes,
+        items: prescriptionForm.items
+      });
+      
+      toast.success(`Đã kê đơn thuốc thành công! Mã: ${res.data.prescription_code}`);
+      setIsPrescribeOpen(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi kê đơn thuốc');
+    } finally {
+      setPrescribing(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!consultationId) return;
@@ -206,6 +322,13 @@ export default function DoctorEMR() {
         </div>
         <div className="flex items-center gap-3">
           <button 
+            onClick={() => setIsPrescribeOpen(true)}
+            disabled={isLocked}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl transition-colors shadow-sm text-sm disabled:opacity-50"
+          >
+            <Pill className="w-4 h-4" /> Kê đơn thuốc
+          </button>
+          <button 
             onClick={handleSave}
             disabled={saving || isLocked}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm disabled:opacity-50"
@@ -264,6 +387,83 @@ export default function DoctorEMR() {
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all min-h-[100px] resize-y disabled:opacity-70"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Đơn thuốc điều trị */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Pill className="w-5 h-5 text-emerald-600" />
+                <h2 className="font-semibold text-slate-800">Đơn thuốc điều trị</h2>
+              </div>
+              {prescription ? (
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${
+                    prescription.dispensed_at ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {prescription.dispensed_at ? 'Đã phát thuốc' : 'Chưa phát thuốc'}
+                  </span>
+                  <button
+                    onClick={() => navigate('/doctor/prescriptions')}
+                    className="text-xs text-blue-600 hover:underline font-medium ml-2"
+                  >
+                    Xem chi tiết
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsPrescribeOpen(true)}
+                  disabled={isLocked}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> Kê đơn ngay
+                </button>
+              )}
+            </div>
+
+            <div className="p-5">
+              {prescription ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span>Mã đơn: <strong className="text-slate-800">{prescription.prescription_code}</strong></span>
+                    {prescription.notes && <span>Lời dặn: <em className="text-slate-700">{prescription.notes}</em></span>}
+                  </div>
+
+                  <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+                    {prescription.items?.map((it: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-white flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
+                        <div>
+                          <div className="font-bold text-slate-800 text-sm">
+                            {idx + 1}. {it.medicine_name}
+                          </div>
+                          <div className="text-slate-500 mt-0.5">
+                            Liều: <span className="font-medium text-slate-700">{it.dosage}</span> • Tần suất: <span className="font-medium text-slate-700">{it.frequency}</span> • {it.instructions}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold text-xs">
+                            SL: {it.quantity}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 text-center text-slate-400">
+                  <Pill className="w-10 h-10 mx-auto text-slate-300 mb-2 opacity-70" />
+                  <p className="text-sm font-medium text-slate-600">Chưa có đơn thuốc cho cuộc khám này</p>
+                  <p className="text-xs text-slate-400 mt-1">Bác sĩ có thể bấm nút "Kê đơn thuốc" để chỉ định thuốc cho bệnh nhân.</p>
+                  <button
+                    onClick={() => setIsPrescribeOpen(true)}
+                    disabled={isLocked}
+                    className="mt-3 inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    <Pill className="w-3.5 h-3.5" /> Kê đơn thuốc mới
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -328,6 +528,259 @@ export default function DoctorEMR() {
           </div>
         </div>
       </div>
+
+      {/* Modal Kê đơn thuốc ngay trong EMR */}
+      {isPrescribeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <Pill className="w-5 h-5 text-emerald-600" /> Kê đơn thuốc điều trị
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Bệnh nhân: <strong className="text-slate-800">{patient?.full_name}</strong> ({patient?.patient_code})
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsPrescribeOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePrescription} className="p-6 space-y-6">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Lời dặn của bác sĩ / Chẩn đoán</label>
+                <input
+                  type="text"
+                  placeholder="VD: Viêm họng cấp, uống nhiều nước ấm, nghỉ ngơi..."
+                  value={prescriptionForm.notes}
+                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Danh sách các dòng thuốc */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <Pill className="w-4 h-4 text-emerald-600" /> Danh mục thuốc ({prescriptionForm.items.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <PlusCircle className="w-4 h-4" /> Thêm thuốc
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {prescriptionForm.items.map((item, idx) => (
+                    <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Tên biệt dược / hoạt chất (VD: Paracetamol, Amoxicillin...)"
+                            value={item.medicine_name}
+                            onFocus={() => setActiveSuggestionRow(idx)}
+                            onChange={(e) => {
+                              handleItemChange(idx, 'medicine_name', e.target.value);
+                              setActiveSuggestionRow(idx);
+                            }}
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none font-medium"
+                          />
+                          {activeSuggestionRow === idx && item.medicine_name.trim().length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto">
+                              {catalogMedicines
+                                .filter(m => m.name.toLowerCase().includes(item.medicine_name.toLowerCase()) || (m.generic_name && m.generic_name.toLowerCase().includes(item.medicine_name.toLowerCase())))
+                                .slice(0, 6)
+                                .map(med => (
+                                  <div
+                                    key={med.id}
+                                    onMouseDown={() => {
+                                      handleItemChange(idx, 'medicine_name', med.name);
+                                      handleItemChange(idx, 'unit_price', med.price || 5000);
+                                      if (med.strength) handleItemChange(idx, 'dosage', `1 ${med.unit || 'viên'}`);
+                                      setActiveSuggestionRow(null);
+                                    }}
+                                    className="p-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center justify-between text-xs transition-colors"
+                                  >
+                                    <div>
+                                      <span className="font-semibold text-slate-800">{med.name}</span>
+                                      {med.generic_name && <span className="text-slate-400 block text-[11px]">{med.generic_name}</span>}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-blue-600 font-semibold">{(med.price || 0).toLocaleString()}đ</span>
+                                      <span className="text-slate-400 text-[10px] block">{med.form || 'Viên'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Xóa thuốc"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Số lượng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Liều dùng</label>
+                          <input
+                            type="text"
+                            value={item.dosage}
+                            onChange={(e) => handleItemChange(idx, 'dosage', e.target.value)}
+                            placeholder="1 viên"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Tần suất</label>
+                          <input
+                            type="text"
+                            value={item.frequency}
+                            onChange={(e) => handleItemChange(idx, 'frequency', e.target.value)}
+                            placeholder="2 lần/ngày"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Số ngày dùng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.duration_days}
+                            onChange={(e) => handleItemChange(idx, 'duration_days', parseInt(e.target.value) || 1)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div className="col-span-2 sm:col-span-4">
+                          <label className="text-slate-500 mb-1 block">Cách dùng & Hướng dẫn</label>
+                          <input
+                            type="text"
+                            value={item.instructions}
+                            onChange={(e) => handleItemChange(idx, 'instructions', e.target.value)}
+                            placeholder="Uống sau khi ăn 30 phút..."
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Drug interaction check button & banner */}
+              <div className="space-y-3">
+                <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" /> AI Kiểm tra tương tác thuốc & Chống chỉ định
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Tự động phân tích tương tác giữa các loại thuốc và đối chiếu dị ứng của bệnh nhân</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCheckInteractions}
+                    disabled={checkingInteractions}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors whitespace-nowrap disabled:opacity-50"
+                  >
+                    {checkingInteractions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    Kiểm tra tương tác
+                  </button>
+                </div>
+
+                {interactionResult && (
+                  <div className={`p-4 rounded-xl border text-xs space-y-2.5 ${
+                    interactionResult.risk_level === 'danger'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : interactionResult.risk_level === 'warning'
+                        ? 'bg-amber-50 border-amber-200 text-amber-900'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      {interactionResult.risk_level === 'safe' ? (
+                        <><ShieldCheck className="w-4 h-4 text-emerald-600" /> Đơn thuốc an toàn - Không phát hiện tương tác nguy hiểm</>
+                      ) : interactionResult.risk_level === 'warning' ? (
+                        <><AlertTriangle className="w-4 h-4 text-amber-600" /> Cảnh báo tương tác thuốc cần lưu ý</>
+                      ) : (
+                        <><AlertTriangle className="w-4 h-4 text-red-600" /> NGUY CƠ DỊ ỨNG / CHỐNG CHỈ ĐỊNH CAO</>
+                      )}
+                    </div>
+                    {interactionResult.warnings.length > 0 && (
+                      <ul className="list-disc pl-5 space-y-1">
+                        {interactionResult.warnings.map((w, idx) => (
+                          <li key={idx} className="font-semibold">{w}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {interactionResult.recommendations.length > 0 && (
+                      <div className="pt-2 border-t border-black/5">
+                        <span className="font-bold block mb-1">Khuyến nghị chuyên môn:</span>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {interactionResult.recommendations.map((r, idx) => (
+                            <li key={idx}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div className="text-xs text-slate-500">
+                  Tổng tiền thuốc dự kiến: <span className="font-bold text-emerald-600 text-sm">
+                    {prescriptionForm.items.reduce((sum, it) => sum + (it.quantity * (it.unit_price || 0)), 0).toLocaleString()}đ
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsPrescribeOpen(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={prescribing}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {prescribing && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {prescribing ? 'Đang lưu đơn thuốc...' : 'Lưu và đính kèm đơn thuốc'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

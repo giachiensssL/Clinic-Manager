@@ -1523,9 +1523,7 @@ class AIToolRegistry:
             pat = (await db.execute(select(Patient).where(Patient.email == user.email))).scalars().first()
             if pat:
                 return pat
-        # Fallback tìm bệnh nhân đầu tiên nếu là tài khoản test role patient
-        pat = (await db.execute(select(Patient).where(Patient.is_active == True).order_by(Patient.created_at.asc()))).scalars().first()
-        return pat
+        return None
 
     async def _handle_get_my_billings(self, db: AsyncSession, user: User, args: dict) -> dict:
         from app.models.models import Billing, BillingStatus, Payment
@@ -1672,14 +1670,18 @@ class AIToolRegistry:
                     dt = datetime.datetime.combine(datetime.date.today(), start_t)
                     end_t = (dt + datetime.timedelta(minutes=30)).time()
                     
-                    await create_appointment(
+                    from app.schemas.appointment import AppointmentCreate
+                    apt_payload = AppointmentCreate(
                         patient_id=pat_id,
-                        doctor_id=args.get("doctor_id"),
-                        specialty_id=specialty_id,
+                        doctor_id=str(args.get("doctor_id")),
+                        specialty_id=str(specialty_id) if specialty_id and specialty_id != "dummy" else None,
                         appointment_date=datetime.date.fromisoformat(args.get("appointment_date")),
                         start_time=start_t,
                         end_time=end_t,
-                        reason=args.get("reason"),
+                        reason=args.get("reason")
+                    )
+                    await create_appointment(
+                        payload=apt_payload,
                         db=db,
                         current_user=user
                     )
@@ -1937,9 +1939,9 @@ class AIToolRegistry:
                 for cd in latest_con.diagnoses:
                     if cd.diagnosis:
                         diagnoses_list.append({
-                            "code": cd.diagnosis.code,
+                            "code": getattr(cd.diagnosis, "icd10_code", getattr(cd.diagnosis, "code", "")),
                             "name": cd.diagnosis.name,
-                            "type": cd.diagnosis_type.value if hasattr(cd.diagnosis_type, 'value') else str(cd.diagnosis_type)
+                            "type": "Chính" if getattr(cd, "is_primary", False) else "Phụ"
                         })
 
         # Lấy Lab Results gần nhất

@@ -98,20 +98,23 @@ async def create_user(
     await db.refresh(new_user)
     
     from datetime import date
+    phone = data.get("phone") or "0901234567"
     if role_str == "patient":
         new_patient = Patient(
             user_id=new_user.id,
             full_name=full_name,
             patient_code=f"BN{new_user.id[:6].upper()}",
             date_of_birth=date(2000, 1, 1),
-            gender="male"
+            gender="male",
+            phone=phone
         )
         db.add(new_patient)
     else:
         new_staff = Staff(
             user_id=new_user.id,
             full_name=full_name,
-            staff_code=f"NV{new_user.id[:6].upper()}"
+            employee_id=f"NV{new_user.id[:6].upper()}",
+            phone=phone
         )
         db.add(new_staff)
         await db.flush()

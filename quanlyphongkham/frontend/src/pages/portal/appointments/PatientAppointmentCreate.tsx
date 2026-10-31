@@ -10,7 +10,9 @@ export default function PatientAppointmentCreate() {
   
   const [step, setStep] = useState(1); // 1: Khoa, 2: Bác sĩ, 3: Ngày giờ, 4: Xác nhận, 5: Thành công
   const [doctors, setDoctors] = useState<any[]>([]);
+  const [specialtiesList, setSpecialtiesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState<string>('');
   
   // Form State
   const [selectedSpecialty, setSelectedSpecialty] = useState<any>(null);
@@ -25,7 +27,7 @@ export default function PatientAppointmentCreate() {
   const [doctorSchedules, setDoctorSchedules] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchDoctors();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -45,12 +47,59 @@ export default function PatientAppointmentCreate() {
     setSelectedTime('');
   }, [selectedDoctor, selectedDate]);
 
-  const fetchDoctors = async () => {
+  const fetchData = async () => {
+    setLoading(true);
+    setDataError('');
     try {
-      const res = await doctorsAPI.getAll();
-      setDoctors(Array.isArray(res.data) ? res.data : (res.data?.items || []));
+      const [docRes, specRes] = await Promise.allSettled([
+        doctorsAPI.getAll(),
+        doctorsAPI.getSpecialties(),
+      ]);
+
+      let loadedDocs: any[] = [];
+      if (docRes.status === 'fulfilled') {
+        loadedDocs = Array.isArray(docRes.value.data) ? docRes.value.data : (docRes.value.data?.items || []);
+        setDoctors(loadedDocs);
+      }
+
+      let loadedSpecs: any[] = [];
+      if (specRes.status === 'fulfilled') {
+        loadedSpecs = Array.isArray(specRes.value.data) ? specRes.value.data : (specRes.value.data?.items || []);
+      }
+
+      // If specialties endpoint wasn't reached or returned empty, extract from doctors
+      if (loadedSpecs.length === 0 && loadedDocs.length > 0) {
+        loadedSpecs = Array.from(
+          new Map(
+            loadedDocs
+              .filter(d => d.specialty)
+              .map(d => [d.specialty.id, d.specialty])
+          ).values()
+        );
+      }
+
+      // Fallback standard clinic specialties if server returned empty
+      if (loadedSpecs.length === 0) {
+        loadedSpecs = [
+          { id: 'd9a2b5a3-1499-423f-a6b2-0a831cf48980', name: 'Nội khoa', description: 'Khám và điều trị các bệnh lý nội tổng quát' },
+          { id: 'a9097453-9b9e-4dbb-882c-7d1041b11277', name: 'Da liễu', description: 'Chuyên khoa da liễu, thẩm mỹ và dị ứng da' },
+          { id: '0e53b66d-e6b1-49f3-8f75-daa5a4f7fb7f', name: 'Nhi khoa', description: 'Khám, tầm soát và tư vấn sức khỏe cho trẻ em' },
+          { id: '35142b1e-128a-4606-a79c-520ce29510a6', name: 'Tim mạch', description: 'Tầm soát, chẩn đoán và điều trị bệnh lý tim mạch' },
+          { id: '308ae6d4-7376-4abe-8c48-2edcc79f03a7', name: 'Tai Mũi Họng', description: 'Khám và điều trị các bệnh lý tai mũi họng người lớn và trẻ nhỏ' },
+          { id: 'd87055f8-46b5-4bf8-8142-b1fae514fdb4', name: 'Nhãn khoa', description: 'Khám và điều trị các bệnh về mắt và thị lực' },
+          { id: '51552edc-9626-4765-b83d-d55bc90ab007', name: 'Cơ xương khớp', description: 'Chẩn đoán và điều trị bệnh lý cơ, xương, khớp, cột sống' },
+          { id: '4fc26cf0-f759-4fe8-82be-0923bbe1295a', name: 'Sản phụ khoa', description: 'Chăm sóc sức khỏe sinh sản, khám thai định kỳ' }
+        ];
+      }
+
+      setSpecialtiesList(loadedSpecs);
+
+      if (docRes.status === 'rejected' && specRes.status === 'rejected') {
+        setDataError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại.');
+      }
     } catch (err) {
-      console.error('Lỗi tải danh sách bác sĩ', err);
+      console.error('Lỗi tải dữ liệu', err);
+      setDataError('Có lỗi xảy ra khi tải dữ liệu chuyên khoa.');
     } finally {
       setLoading(false);
     }
@@ -88,7 +137,7 @@ export default function PatientAppointmentCreate() {
       await appointmentsAPI.create({
         patient_id: realPatientId,
         doctor_id: selectedDoctor.id,
-        specialty_id: selectedDoctor.specialty?.id || selectedDoctor.specialty_id || 'general',
+        specialty_id: selectedDoctor.specialty?.id || selectedDoctor.specialty_id || selectedSpecialty?.id || 'general',
         appointment_date: selectedDate,
         start_time: selectedTime,
         end_time: endTime,
@@ -105,16 +154,14 @@ export default function PatientAppointmentCreate() {
     }
   };
 
-  const specialties = Array.from(
-    new Map(
-      doctors
-        .filter(d => d.specialty)
-        .map(d => [d.specialty.id, d.specialty])
-    ).values()
-  );
+  const specialties = specialtiesList;
 
   const filteredDoctors = selectedSpecialty 
-    ? doctors.filter(d => d.specialty?.id === selectedSpecialty.id)
+    ? doctors.filter(d => 
+        (d.specialty?.id && d.specialty.id === selectedSpecialty.id) ||
+        (d.specialty_id && d.specialty_id === selectedSpecialty.id) ||
+        (d.specialty?.name && selectedSpecialty.name && d.specialty.name.toLowerCase() === selectedSpecialty.name.toLowerCase())
+      )
     : doctors;
 
   return (
@@ -157,36 +204,68 @@ export default function PatientAppointmentCreate() {
                <Stethoscope className="w-5 h-5" /> Vui lòng chọn Chuyên khoa
             </h2>
             
+            {dataError && (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm flex items-center justify-between">
+                <span>{dataError}</span>
+                <button 
+                  onClick={fetchData} 
+                  className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-colors"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-20 bg-slate-50 animate-pulse rounded-xl border border-[#E2E8F0]" />)}
               </div>
             ) : specialties.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {specialties.map((spec: any) => (
-                  <div 
-                    key={spec.id}
-                    onClick={() => { setSelectedSpecialty(spec); setSelectedDoctor(null); }}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-center gap-1 ${
-                      selectedSpecialty?.id === spec.id 
-                        ? 'border-[#0D6EFD] bg-blue-50/50 shadow-sm' 
-                        : 'border-[#E2E8F0] hover:border-blue-200'
-                    }`}
-                  >
-                    <h3 className="font-bold text-[#0B3B78]">{spec.name}</h3>
-                    <p className="text-xs text-[#64748B] line-clamp-2">{spec.description || 'Khám chuyên khoa'}</p>
-                  </div>
-                ))}
+                {specialties.map((spec: any) => {
+                  const docCount = doctors.filter(d => 
+                    (d.specialty?.id && d.specialty.id === spec.id) ||
+                    (d.specialty_id && d.specialty_id === spec.id) ||
+                    (d.specialty?.name && d.specialty.name.toLowerCase() === spec.name?.toLowerCase())
+                  ).length;
+
+                  return (
+                    <div 
+                      key={spec.id}
+                      onClick={() => { setSelectedSpecialty(spec); setSelectedDoctor(null); }}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-2 min-h-[96px] ${
+                        selectedSpecialty?.id === spec.id 
+                          ? 'border-[#0D6EFD] bg-blue-50/50 shadow-sm ring-1 ring-[#0D6EFD]' 
+                          : 'border-[#E2E8F0] hover:border-blue-200 hover:shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-[#0B3B78] text-base">{spec.name}</h3>
+                        {docCount > 0 && (
+                          <span className="text-[11px] font-medium bg-blue-100/70 text-[#0B3B78] px-2 py-0.5 rounded-full shrink-0">
+                            {docCount} bác sĩ
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#64748B] line-clamp-2">{spec.description || 'Khám và tư vấn chuyên khoa'}</p>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-               <div className="text-center py-10 text-[#64748B]">Không có chuyên khoa nào.</div>
+               <div className="text-center py-10 text-[#64748B]">
+                 <p className="mb-3">Không có chuyên khoa nào khả dụng.</p>
+                 <button onClick={fetchData} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100">
+                   Tải lại danh sách
+                 </button>
+               </div>
             )}
             
             <div className="mt-8 flex justify-end">
               <button 
                 disabled={!selectedSpecialty}
                 onClick={() => setStep(2)}
-                className="bg-[#0B3B78] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-[#0B3B78] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all shadow-sm"
               >
                 Tiếp tục <ChevronRight className="w-4 h-4" />
               </button>
@@ -212,7 +291,7 @@ export default function PatientAppointmentCreate() {
                     onClick={() => setSelectedDoctor(doc)}
                     className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
                       selectedDoctor?.id === doc.id 
-                        ? 'border-[#0D6EFD] bg-blue-50/50 shadow-sm' 
+                        ? 'border-[#0D6EFD] bg-blue-50/50 shadow-sm ring-1 ring-[#0D6EFD]' 
                         : 'border-[#E2E8F0] hover:border-blue-200'
                     }`}
                   >
@@ -230,8 +309,43 @@ export default function PatientAppointmentCreate() {
                   </div>
                 )})}
               </div>
+            ) : doctors.length > 0 ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 border border-blue-200 text-[#0B3B78] rounded-xl text-sm">
+                  Hiện chưa có bác sĩ trực tiếp của khoa <strong>{selectedSpecialty?.name}</strong>. Bạn có thể chọn khám với một trong các bác sĩ đang trực dưới đây:
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {doctors.map(doc => {
+                    const fullName = doc.staff?.full_name || doc.full_name || 'Bác sĩ';
+                    return (
+                      <div 
+                        key={doc.id}
+                        onClick={() => setSelectedDoctor(doc)}
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
+                          selectedDoctor?.id === doc.id 
+                            ? 'border-[#0D6EFD] bg-blue-50/50 shadow-sm ring-1 ring-[#0D6EFD]' 
+                            : 'border-[#E2E8F0] hover:border-blue-200'
+                        }`}
+                      >
+                        <img 
+                          src={doc.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=F1F5F9&color=0B3B78`}
+                          className="w-14 h-14 object-cover rounded-full border border-slate-200 shadow-sm"
+                          alt={fullName}
+                        />
+                        <div>
+                          <h3 className="font-bold text-[#0B3B78]">{fullName}</h3>
+                          <p className="text-xs text-slate-500">{doc.specialty?.name || 'Bác sĩ trực'}</p>
+                          <p className="text-xs text-[#0D6EFD] mt-1 font-medium bg-blue-50 inline-block px-2 py-1 rounded">
+                            Phí khám: {doc.consultation_fee?.toLocaleString()}đ
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             ) : (
-               <div className="text-center py-10 text-[#64748B]">Không có bác sĩ nào trong chuyên khoa này.</div>
+               <div className="text-center py-10 text-[#64748B]">Không có bác sĩ nào khả dụng.</div>
             )}
             
             <div className="mt-8 flex justify-between">
@@ -243,7 +357,19 @@ export default function PatientAppointmentCreate() {
               </button>
               <button 
                 disabled={!selectedDoctor}
-                onClick={() => setStep(3)}
+                onClick={() => {
+                  if (!selectedDate) {
+                    const now = new Date();
+                    const target = (now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 30))
+                      ? new Date(now.getTime() + 86400000)
+                      : now;
+                    const y = target.getFullYear();
+                    const m = (target.getMonth() + 1).toString().padStart(2, '0');
+                    const d = target.getDate().toString().padStart(2, '0');
+                    setSelectedDate(`${y}-${m}-${d}`);
+                  }
+                  setStep(3);
+                }}
                 className="bg-[#0B3B78] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 Tiếp tục <ChevronRight className="w-4 h-4" />
@@ -272,9 +398,11 @@ export default function PatientAppointmentCreate() {
                 
                 {doctorSchedules.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs text-[#64748B] mb-2 font-medium">Bác sĩ có lịch vào các ngày (gợi ý):</p>
+                    <p className="text-xs text-[#64748B] mb-2 font-medium">Bác sĩ có lịch làm việc giờ hành chính vào các ngày:</p>
                     <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set(doctorSchedules.map(s => s.day_of_week))).map(day => {
+                      {Array.from(new Set(doctorSchedules.map(s => s.day_of_week)))
+                        .sort((a: any, b: any) => a - b)
+                        .map(day => {
                         const nextDate = new Date();
                         // Find next occurrence of this day of week
                         const targetDay = day === 6 ? 0 : day + 1; // back to JS day
@@ -323,14 +451,22 @@ export default function PatientAppointmentCreate() {
               </div>
               
               <div>
-                <label className="block text-sm font-bold text-[#334155] mb-2">Giờ khám (Dự kiến)</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-bold text-[#334155]">Giờ khám (Giờ hành chính)</label>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
+                    Sáng 08:00 - 12:00 | Chiều 13:30 - 17:00
+                  </span>
+                </div>
                 {!selectedDate ? (
                    <p className="text-sm text-[#64748B] italic">Vui lòng chọn ngày khám ở cột bên trái.</p>
                 ) : loadingSlots ? (
-                   <div className="flex items-center gap-2 text-sm text-[#64748B]"><div className="w-4 h-4 border-2 border-[#0D6EFD] border-t-transparent rounded-full animate-spin"></div> Đang tải lịch...</div>
+                   <div className="flex items-center gap-2 text-sm text-[#64748B] py-6 justify-center">
+                     <div className="w-4 h-4 border-2 border-[#0D6EFD] border-t-transparent rounded-full animate-spin"></div> 
+                     Đang tải danh sách khung giờ hành chính...
+                   </div>
                 ) : slots.length === 0 ? (
-                   <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">
-                      Bác sĩ không có lịch làm việc hoặc đã kín lịch vào ngày này. Vui lòng chọn ngày khác.
+                   <div className="p-4 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 text-sm">
+                      Không có khung giờ khám khả dụng vào ngày này. Vui lòng chọn ngày khác.
                    </div>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">

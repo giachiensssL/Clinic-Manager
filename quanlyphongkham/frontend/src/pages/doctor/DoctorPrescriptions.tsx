@@ -1,16 +1,31 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Pill, Search, Filter, Plus, FileText, X, Trash2, PlusCircle, Loader2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Pill, Search, Filter, Plus, FileText, X, Trash2, PlusCircle, Loader2, Sparkles, Printer, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { prescriptionsAPI, doctorAPI, patientsAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function DoctorPrescriptions() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const patientIdParam = searchParams.get('patientId');
+
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [selectedPx, setSelectedPx] = useState<any>(null);
   const [pxLoading, setPxLoading] = useState(false);
+
+  // Medicine catalog for autocomplete
+  const [catalogMedicines, setCatalogMedicines] = useState<any[]>([]);
+  const [activeSuggestionRow, setActiveSuggestionRow] = useState<number | null>(null);
+
+  // AI Interaction check state
+  const [checkingInteractions, setCheckingInteractions] = useState(false);
+  const [interactionResult, setInteractionResult] = useState<{
+    risk_level: 'safe' | 'warning' | 'danger';
+    warnings: string[];
+    recommendations: string[];
+  } | null>(null);
 
   // Create Prescription Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -42,7 +57,45 @@ export default function DoctorPrescriptions() {
     patientsAPI.getAll({ size: 100 })
       .then(res => setPatients(res.data.items || []))
       .catch(() => {});
+    // Load medicine catalog for autocomplete
+    prescriptionsAPI.getMedicines({ limit: 100 })
+      .then(res => setCatalogMedicines(res.data.items || []))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (patientIdParam) {
+      setFormData(prev => ({ ...prev, patient_id: patientIdParam }));
+      setIsCreateOpen(true);
+    }
+  }, [patientIdParam]);
+
+  const handleCheckInteractions = async () => {
+    const medNames = formData.items.map(it => it.medicine_name.trim()).filter(Boolean);
+    if (medNames.length === 0) {
+      toast.error('Vui lòng nhập ít nhất 1 loại thuốc để kiểm tra');
+      return;
+    }
+    try {
+      setCheckingInteractions(true);
+      const res = await prescriptionsAPI.checkInteractions({
+        medicine_names: medNames,
+        patient_id: formData.patient_id || undefined,
+      });
+      setInteractionResult(res.data);
+      if (res.data.risk_level === 'safe') {
+        toast.success('Đơn thuốc an toàn! Không có tương tác nguy hiểm.');
+      } else if (res.data.risk_level === 'warning') {
+        toast('Phát hiện tương tác thuốc cần lưu ý!', { icon: '⚠️' });
+      } else {
+        toast.error('CẢNH BÁO NGUY HIỂM: Có nguy cơ dị ứng hoặc chống chỉ định!');
+      }
+    } catch (err: any) {
+      toast.error('Lỗi khi kiểm tra tương tác thuốc');
+    } finally {
+      setCheckingInteractions(false);
+    }
+  };
 
   const handleView = async (id: string) => {
     try {
@@ -228,9 +281,18 @@ export default function DoctorPrescriptions() {
               <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                 <Pill className="w-5 h-5 text-blue-600" /> Chi tiết đơn thuốc {selectedPx.prescription_code}
               </h3>
-              <button onClick={() => setSelectedPx(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <Printer className="w-4 h-4" /> In đơn thuốc
+                </button>
+                <button onClick={() => setSelectedPx(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 overflow-y-auto flex-1">
@@ -272,7 +334,14 @@ export default function DoctorPrescriptions() {
                 ))}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 text-right">
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <button 
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+              >
+                <Printer className="w-4 h-4" /> In đơn thuốc (A5)
+              </button>
               <button onClick={() => setSelectedPx(null)} className="px-6 py-2 bg-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-300 transition-colors">
                 Đóng
               </button>
@@ -349,15 +418,47 @@ export default function DoctorPrescriptions() {
                     <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
-                        <div className="flex-1">
+                        <div className="flex-1 relative">
                           <input
                             type="text"
                             required
-                            placeholder="Tên biệt dược / hoạt chất (VD: Augmentin 625mg)"
+                            placeholder="Tên biệt dược / hoạt chất (VD: Augmentin, Paracetamol...)"
                             value={item.medicine_name}
-                            onChange={(e) => handleItemChange(idx, 'medicine_name', e.target.value)}
+                            onFocus={() => setActiveSuggestionRow(idx)}
+                            onChange={(e) => {
+                              handleItemChange(idx, 'medicine_name', e.target.value);
+                              setActiveSuggestionRow(idx);
+                            }}
                             className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none font-medium"
                           />
+                          {activeSuggestionRow === idx && item.medicine_name.trim().length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto">
+                              {catalogMedicines
+                                .filter(m => m.name.toLowerCase().includes(item.medicine_name.toLowerCase()) || (m.generic_name && m.generic_name.toLowerCase().includes(item.medicine_name.toLowerCase())))
+                                .slice(0, 6)
+                                .map(med => (
+                                  <div
+                                    key={med.id}
+                                    onMouseDown={() => {
+                                      handleItemChange(idx, 'medicine_name', med.name);
+                                      handleItemChange(idx, 'unit_price', med.price || 5000);
+                                      if (med.strength) handleItemChange(idx, 'dosage', `1 ${med.unit || 'viên'}`);
+                                      setActiveSuggestionRow(null);
+                                    }}
+                                    className="p-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center justify-between text-xs transition-colors"
+                                  >
+                                    <div>
+                                      <span className="font-semibold text-slate-800">{med.name}</span>
+                                      {med.generic_name && <span className="text-slate-400 block text-[11px]">{med.generic_name}</span>}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-blue-600 font-semibold">{(med.price || 0).toLocaleString()}đ</span>
+                                      <span className="text-slate-400 text-[10px] block">{med.form || 'Viên'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -430,22 +531,87 @@ export default function DoctorPrescriptions() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {creating ? 'Đang lưu đơn thuốc...' : 'Lưu và xuất đơn thuốc'}
-                </button>
+              {/* AI Drug interaction check button & banner */}
+              <div className="space-y-3">
+                <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" /> AI Kiểm tra tương tác thuốc & Chống chỉ định
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Tự động phân tích tương tác giữa các loại thuốc và đối chiếu dị ứng của bệnh nhân</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCheckInteractions}
+                    disabled={checkingInteractions}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors whitespace-nowrap disabled:opacity-50"
+                  >
+                    {checkingInteractions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    Kiểm tra tương tác
+                  </button>
+                </div>
+
+                {interactionResult && (
+                  <div className={`p-4 rounded-xl border text-xs space-y-2.5 ${
+                    interactionResult.risk_level === 'danger'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : interactionResult.risk_level === 'warning'
+                        ? 'bg-amber-50 border-amber-200 text-amber-900'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      {interactionResult.risk_level === 'safe' ? (
+                        <><ShieldCheck className="w-4 h-4 text-emerald-600" /> Đơn thuốc an toàn - Không phát hiện tương tác nguy hiểm</>
+                      ) : interactionResult.risk_level === 'warning' ? (
+                        <><AlertTriangle className="w-4 h-4 text-amber-600" /> Cảnh báo tương tác thuốc cần lưu ý</>
+                      ) : (
+                        <><AlertTriangle className="w-4 h-4 text-red-600" /> NGUY CƠ DỊ ỨNG / CHỐNG CHỈ ĐỊNH CAO</>
+                      )}
+                    </div>
+                    {interactionResult.warnings.length > 0 && (
+                      <ul className="list-disc pl-5 space-y-1">
+                        {interactionResult.warnings.map((w, idx) => (
+                          <li key={idx} className="font-semibold">{w}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {interactionResult.recommendations.length > 0 && (
+                      <div className="pt-2 border-t border-black/5">
+                        <span className="font-bold block mb-1">Khuyến nghị chuyên môn:</span>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {interactionResult.recommendations.map((r, idx) => (
+                            <li key={idx}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div className="text-xs text-slate-500">
+                  Tổng tiền thuốc dự kiến: <span className="font-bold text-blue-600 text-sm">
+                    {formData.items.reduce((sum, it) => sum + (it.quantity * (it.unit_price || 0)), 0).toLocaleString()}đ
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOpen(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {creating ? 'Đang lưu đơn thuốc...' : 'Lưu và xuất đơn thuốc'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

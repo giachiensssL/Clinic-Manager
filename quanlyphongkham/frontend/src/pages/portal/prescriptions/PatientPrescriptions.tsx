@@ -20,15 +20,35 @@ export default function PatientPrescriptions() {
     fetchPrescriptions();
   }, []);
 
+  const formatPrescriptionDate = (dateStr?: string) => {
+    if (!dateStr) return "N/A";
+    try {
+      return format(parseISO(dateStr), "dd/MM/yyyy", { locale: vi });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatPrescriptionDateTime = (dateStr?: string) => {
+    if (!dateStr) return "N/A";
+    try {
+      return format(parseISO(dateStr), "dd/MM/yyyy HH:mm", { locale: vi });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const fetchPrescriptions = async () => {
     try {
       setLoading(true);
       setError("");
       const res = await prescriptionsAPI.getAll();
-      setPrescriptions(res.data.items || []);
-    } catch (err) {
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+      setPrescriptions(items);
+    } catch (err: any) {
       console.error(err);
-      setError("Không thể tải danh sách đơn thuốc. Vui lòng thử lại sau.");
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : "Không thể tải danh sách đơn thuốc. Vui lòng thử lại sau.");
     } finally {
       setLoading(false);
     }
@@ -54,9 +74,11 @@ export default function PatientPrescriptions() {
 
   if (error) {
     return (
-      <div className="bg-red-50 text-red-600 p-4 rounded-lg text-center">
-        {error}
-        <button onClick={fetchPrescriptions} className="ml-4 underline font-medium">Thử lại</button>
+      <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl text-center max-w-xl mx-auto my-8">
+        <p className="font-medium mb-3">{error}</p>
+        <button onClick={fetchPrescriptions} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors">
+          Thử lại
+        </button>
       </div>
     );
   }
@@ -81,41 +103,46 @@ export default function PatientPrescriptions() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {prescriptions.map((rx) => (
-              <div 
-                key={rx.id} 
-                onClick={() => handleViewDetails(rx.id)}
-                className="p-5 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-lg mb-1">{rx.prescription_code || 'Đơn thuốc'}</h3>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-4 h-4" />
-                        {format(parseISO(rx.created_at), "dd/MM/yyyy", { locale: vi })}
-                      </span>
-                      <span className="hidden sm:block w-1 h-1 rounded-full bg-slate-300"></span>
-                      <span>BS: {rx.doctor?.full_name || rx.doctor?.staff?.full_name || 'Không rõ'}</span>
+            {prescriptions.map((rx) => {
+              const isDispensed = rx.dispensed_at || rx.status === 'dispensed';
+              const doctorName = rx.doctor?.full_name || rx.doctor?.staff?.full_name || rx.doctor_name || 'Bác sĩ phụ trách';
+
+              return (
+                <div 
+                  key={rx.id} 
+                  onClick={() => handleViewDetails(rx.id)}
+                  className="p-5 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-lg mb-1">{rx.prescription_code || 'Đơn thuốc'}</h3>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4" />
+                          {formatPrescriptionDate(rx.created_at)}
+                        </span>
+                        <span className="hidden sm:block w-1 h-1 rounded-full bg-slate-300"></span>
+                        <span>BS: {doctorName}</span>
+                      </div>
                     </div>
                   </div>
+                  
+                  <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                      isDispensed 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {isDispensed ? 'Đã phát thuốc' : 'Chưa phát thuốc'}
+                    </span>
+                    <ChevronRight className="w-5 h-5 text-slate-400 ml-4 hidden sm:block" />
+                  </div>
                 </div>
-                
-                <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
-                  <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
-                    rx.dispensed_at 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {rx.dispensed_at ? 'Đã phát thuốc' : 'Chưa phát thuốc'}
-                  </span>
-                  <ChevronRight className="w-5 h-5 text-slate-400 ml-4 hidden sm:block" />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -136,16 +163,28 @@ export default function PatientPrescriptions() {
                 <div>
                   <p className="text-sm text-slate-500 mb-1">Ngày kê đơn</p>
                   <p className="font-semibold text-slate-800">
-                    {format(parseISO(selectedPrescription.created_at || new Date().toISOString()), "dd/MM/yyyy HH:mm")}
+                    {formatPrescriptionDateTime(selectedPrescription.created_at)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500 mb-1">Trạng thái</p>
                   <p className="font-semibold text-slate-800">
-                    {selectedPrescription.dispensed_at ? 'Đã phát thuốc' : 'Chưa phát thuốc'}
+                    {selectedPrescription.dispensed_at || selectedPrescription.status === 'dispensed' ? 'Đã phát thuốc' : 'Chưa phát thuốc'}
                   </p>
                 </div>
-                <div className="col-span-2">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Bác sĩ kê đơn</p>
+                  <p className="font-semibold text-slate-800">
+                    {selectedPrescription.doctor?.full_name || selectedPrescription.doctor_name || 'Bác sĩ phụ trách'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Tổng tiền ước tính</p>
+                  <p className="font-semibold text-blue-600">
+                    {selectedPrescription.total_price ? `${Number(selectedPrescription.total_price).toLocaleString('vi-VN')} đ` : 'Miễn phí / Chưa có'}
+                  </p>
+                </div>
+                <div className="col-span-1 sm:col-span-2">
                   <p className="text-sm text-slate-500 mb-1">Ghi chú của bác sĩ</p>
                   <p className="text-slate-800 bg-white p-3 rounded-lg border border-slate-200 mt-1">
                     {selectedPrescription.notes || 'Không có ghi chú'}
