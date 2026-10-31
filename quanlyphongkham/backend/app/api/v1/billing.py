@@ -62,51 +62,71 @@ async def list_billings(
     return {"items": response, "total": len(response)}
 
 
+from pydantic import BaseModel
+
+class CreateBillingDTO(BaseModel):
+    patient_id: Optional[str] = None
+    appointment_id: Optional[str] = None
+    consultation_fee: float = 0.0
+    medicine_fee: float = 0.0
+    service_fee: float = 0.0
+    insurance_covered: float = 0.0
+    discount: float = 0.0
+    due_date: Optional[date] = None
+    notes: Optional[str] = None
+
 @router.post("", summary="Tao hoa don moi", status_code=201)
 async def create_billing(
-    appointment_id: str,
-    consultation_fee: float = 0.0,
-    medicine_fee: float = 0.0,
-    service_fee: float = 0.0,
-    insurance_covered: float = 0.0,
-    discount: float = 0.0,
-    due_date: Optional[date] = None,
-    notes: Optional[str] = None,
+    payload: CreateBillingDTO,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_accountant),
 ) -> dict:
-    """Tao hoa don cho mot lich hen — chi ke toan va admin duoc phep"""
-    appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
-    if not appt:
-        raise HTTPException(status_code=404, detail="Khong tim thay lich hen")
+    """Tao hoa don cho mot lich hen hoac truc tiep cho benh nhan — chi ke toan va admin duoc phep"""
+    from app.models.models import Patient
+    patient_id = payload.patient_id
+    appointment_id = payload.appointment_id
 
-    existing = (await db.execute(select(Billing).where(Billing.appointment_id == appointment_id))).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=409, detail="Lich hen nay da co hoa don")
+    if appointment_id:
+        appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
+        if not appt:
+            raise HTTPException(status_code=404, detail="Khong tim thay lich hen")
+        patient_id = appt.patient_id
 
-    total = consultation_fee + medicine_fee + service_fee - insurance_covered - discount
+        existing = (await db.execute(select(Billing).where(Billing.appointment_id == appointment_id))).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=409, detail="Lich hen nay da co hoa don")
+
+    if not patient_id:
+        raise HTTPException(status_code=400, detail="Vui long chon benh nhan hoac lich hen")
+
+    pat = (await db.execute(select(Patient).where(Patient.id == patient_id))).scalar_one_or_none()
+    if not pat:
+        raise HTTPException(status_code=404, detail="Khong tim thay benh nhan")
+
+    total = payload.consultation_fee + payload.medicine_fee + payload.service_fee - payload.insurance_covered - payload.discount
     if total < 0:
         total = 0.0
 
     billing = Billing(
         id=str(uuid.uuid4()),
         invoice_code=_generate_invoice_code(),
-        patient_id=appt.patient_id,
+        patient_id=patient_id,
         appointment_id=appointment_id,
-        consultation_fee=consultation_fee,
-        medicine_fee=medicine_fee,
-        service_fee=service_fee,
+        consultation_fee=payload.consultation_fee,
+        medicine_fee=payload.medicine_fee,
+        service_fee=payload.service_fee,
         total_amount=total,
-        insurance_covered=insurance_covered,
-        discount=discount,
+        insurance_covered=payload.insurance_covered,
+        discount=payload.discount,
         paid_amount=0.0,
         remaining_amount=total,
         status=BillingStatus.UNPAID,
-        due_date=due_date,
-        notes=notes,
+        due_date=payload.due_date,
+        notes=payload.notes,
     )
     db.add(billing)
-    await db.flush()
+    await db.commit()
+    await db.refresh(billing)
 
     await log_action(db, current_user, AuditAction.CREATE, "billing", billing.id)
     return {
@@ -114,6 +134,7 @@ async def create_billing(
         "invoice_code": billing.invoice_code,
         "total_amount": billing.total_amount,
         "status": billing.status.value,
+        "patient_name": pat.full_name,
     }
 
 

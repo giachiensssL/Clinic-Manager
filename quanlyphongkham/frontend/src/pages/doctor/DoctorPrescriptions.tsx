@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pill, Search, Filter, Plus, FileText, X } from 'lucide-react';
-import { prescriptionsAPI } from '@/services/api';
+import { Pill, Search, Filter, Plus, FileText, X, Trash2, PlusCircle, Loader2 } from 'lucide-react';
+import { prescriptionsAPI, doctorAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function DoctorPrescriptions() {
@@ -12,19 +12,36 @@ export default function DoctorPrescriptions() {
   const [selectedPx, setSelectedPx] = useState<any>(null);
   const [pxLoading, setPxLoading] = useState(false);
 
+  // Create Prescription Modal State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [formData, setFormData] = useState({
+    patient_id: '',
+    notes: '',
+    items: [
+      { medicine_name: 'Paracetamol 500mg', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau ăn', unit_price: 2000 }
+    ]
+  });
+
+  const fetchPrescriptions = async () => {
+    try {
+      setLoading(true);
+      const { data } = await prescriptionsAPI.getAll();
+      setPrescriptions(data.items || []);
+    } catch (error) {
+      toast.error('Lỗi khi tải danh sách đơn thuốc');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchPrescriptions = async () => {
-      try {
-        setLoading(true);
-        const { data } = await prescriptionsAPI.getAll();
-        setPrescriptions(data.items || []);
-      } catch (error) {
-        toast.error('Lỗi khi tải danh sách đơn thuốc');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPrescriptions();
+    // Load patients for prescribing
+    doctorAPI.searchPatients('')
+      .then(res => setPatients(res.data.items || []))
+      .catch(() => {});
   }, []);
 
   const handleView = async (id: string) => {
@@ -39,9 +56,68 @@ export default function DoctorPrescriptions() {
     }
   };
 
-  const handleCreateNew = () => {
-    toast('Vui lòng chọn một ca khám để kê đơn thuốc mới.', { icon: 'ℹ️' });
-    navigate('/doctor/appointments');
+  const handleAddItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { medicine_name: '', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau ăn', unit_price: 5000 }
+      ]
+    }));
+  };
+
+  const handleRemoveItem = (index: number) => {
+    if (formData.items.length <= 1) {
+      toast.error('Đơn thuốc phải có ít nhất 1 loại thuốc');
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleItemChange = (index: number, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((it, i) => i === index ? { ...it, [field]: value } : it)
+    }));
+  };
+
+  const handleSavePrescription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.patient_id) {
+      toast.error('Vui lòng chọn bệnh nhân');
+      return;
+    }
+    const invalidItem = formData.items.find(it => !it.medicine_name.trim());
+    if (invalidItem) {
+      toast.error('Vui lòng nhập tên thuốc cho tất cả các dòng');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const res = await prescriptionsAPI.create({
+        patient_id: formData.patient_id,
+        notes: formData.notes.trim() || 'Kê đơn thuốc ngoại trú',
+        items: formData.items
+      });
+      toast.success(`Tạo đơn thuốc thành công! Mã: ${res.data.prescription_code}`);
+      setIsCreateOpen(false);
+      setFormData({
+        patient_id: '',
+        notes: '',
+        items: [
+          { medicine_name: 'Paracetamol 500mg', dosage: '1 viên', frequency: '2 lần/ngày', duration_days: 5, quantity: 10, instructions: 'Uống sau ăn', unit_price: 2000 }
+        ]
+      });
+      fetchPrescriptions();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi tạo đơn thuốc');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -52,7 +128,7 @@ export default function DoctorPrescriptions() {
           <p className="text-sm text-slate-500 mt-1">Danh sách các đơn thuốc đã kê cho bệnh nhân</p>
         </div>
         <button 
-          onClick={handleCreateNew}
+          onClick={() => setIsCreateOpen(true)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm text-sm"
         >
           <Plus className="w-4 h-4" /> Kê đơn mới
@@ -189,6 +265,177 @@ export default function DoctorPrescriptions() {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Kê đơn thuốc mới */}
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Kê đơn thuốc mới</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Chọn bệnh nhân và chỉ định danh mục thuốc điều trị</p>
+              </div>
+              <button 
+                onClick={() => setIsCreateOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePrescription} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chọn bệnh nhân <span className="text-red-500">*</span></label>
+                  <select
+                    required
+                    value={formData.patient_id}
+                    onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">-- Chọn bệnh nhân --</option>
+                    {patients.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name} ({p.patient_code}) - {p.phone || 'SĐT chưa có'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lời dặn của bác sĩ / Chẩn đoán</label>
+                  <input
+                    type="text"
+                    placeholder="VD: Viêm phế quản cấp, uống nhiều nước ấm..."
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Danh sách các dòng thuốc */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <Pill className="w-4 h-4 text-blue-600" /> Danh mục thuốc ({formData.items.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <PlusCircle className="w-4 h-4" /> Thêm thuốc
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {formData.items.map((item, idx) => (
+                    <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Tên biệt dược / hoạt chất (VD: Augmentin 625mg)"
+                            value={item.medicine_name}
+                            onChange={(e) => handleItemChange(idx, 'medicine_name', e.target.value)}
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none font-medium"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Xóa thuốc"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Số lượng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Liều dùng</label>
+                          <input
+                            type="text"
+                            value={item.dosage}
+                            onChange={(e) => handleItemChange(idx, 'dosage', e.target.value)}
+                            placeholder="1 viên"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Tần suất</label>
+                          <input
+                            type="text"
+                            value={item.frequency}
+                            onChange={(e) => handleItemChange(idx, 'frequency', e.target.value)}
+                            placeholder="2 lần/ngày"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 mb-1 block">Số ngày dùng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.duration_days}
+                            onChange={(e) => handleItemChange(idx, 'duration_days', parseInt(e.target.value) || 1)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+
+                        <div className="col-span-2 sm:col-span-4">
+                          <label className="text-slate-500 mb-1 block">Cách dùng & Hướng dẫn</label>
+                          <input
+                            type="text"
+                            value={item.instructions}
+                            onChange={(e) => handleItemChange(idx, 'instructions', e.target.value)}
+                            placeholder="Uống sau khi ăn 30 phút, kiêng đồ chua cay..."
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {creating ? 'Đang lưu đơn thuốc...' : 'Lưu và xuất đơn thuốc'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

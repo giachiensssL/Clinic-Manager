@@ -162,7 +162,7 @@ async def create_appointment(
         appointment_code=_generate_appointment_code(),
         patient_id=payload.patient_id,
         doctor_id=payload.doctor_id,
-        specialty_id=payload.specialty_id if payload.specialty_id != 'general' else None,
+        specialty_id=(payload.specialty_id if (payload.specialty_id and payload.specialty_id != 'general') else doc.specialty_id),
         appointment_date=payload.appointment_date,
         start_time=payload.start_time,
         end_time=payload.end_time,

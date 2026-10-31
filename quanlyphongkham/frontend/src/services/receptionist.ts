@@ -15,6 +15,7 @@ export const receptionistApi = {
   createPatient: (data: any) => api.post('/receptionist/patients', data).then(res => res.data),
   
   getQueue: () => api.get('/receptionist/queue').then(res => res.data),
+  addToQueue: (data: any) => api.post('/receptionist/queue', data).then(res => res.data),
   updateQueueStatus: (id: string, status: string) => api.patch(`/receptionist/queue/${id}/status`, { status }).then(res => res.data),
   
   getPayments: () => api.get('/receptionist/payments').then(res => res.data),

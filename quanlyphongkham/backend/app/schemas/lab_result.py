@@ -20,10 +20,17 @@ class LabResultBase(BaseModel):
     notes: Optional[str] = None
     file_url: Optional[str] = None
 
-class LabResultCreate(LabResultBase):
+class LabResultCreate(BaseModel):
     patient_id: str
+    test_name: str = Field(..., max_length=255)
+    test_code: Optional[str] = None
+    test_date: Optional[datetime] = None
     doctor_id: Optional[str] = None
     consultation_id: Optional[str] = None
+    status: LabResultStatus = LabResultStatus.PENDING
+    result_data: Optional[List[ResultItem]] = None
+    notes: Optional[str] = None
+    file_url: Optional[str] = None
 
 class LabResultResponse(LabResultBase):
     id: str

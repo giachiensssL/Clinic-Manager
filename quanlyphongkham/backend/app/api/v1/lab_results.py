@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.models import LabResult, User, UserRole, Patient, Doctor, Staff
-from app.schemas.lab_result import LabResultListResponse, LabResultResponse
+from app.schemas.lab_result import LabResultListResponse, LabResultResponse, LabResultCreate
 
 router = APIRouter()
 
@@ -104,3 +104,56 @@ async def update_lab_result_status(
         
     await db.commit()
     return {"message": "Đã cập nhật trạng thái"}
+
+
+@router.post("", response_model=LabResultResponse, status_code=201)
+async def create_lab_result(
+    payload: LabResultCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import uuid
+    import random
+    from datetime import datetime, timezone
+
+    if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN, UserRole.RECEPTIONIST]:
+        raise HTTPException(status_code=403, detail="Chỉ bác sĩ hoặc nhân viên y tế mới có quyền chỉ định xét nghiệm")
+
+    # Resolve doctor_id if not explicitly provided
+    doc_id = payload.doctor_id
+    if not doc_id and current_user.role == UserRole.DOCTOR:
+        doc_res = await db.execute(select(Doctor.id).where(Doctor.user_id == current_user.id))
+        doc_id = doc_res.scalar_one_or_none()
+
+    test_code = payload.test_code or f"XN{random.randint(100000, 999999)}"
+    test_date = payload.test_date or datetime.now(timezone.utc)
+
+    lab_result = LabResult(
+        id=str(uuid.uuid4()),
+        patient_id=payload.patient_id,
+        doctor_id=doc_id,
+        consultation_id=payload.consultation_id,
+        test_code=test_code,
+        test_name=payload.test_name,
+        test_date=test_date,
+        status=payload.status or LabResultStatus.PENDING,
+        result_data=[item.model_dump() for item in payload.result_data] if payload.result_data else None,
+        notes=payload.notes,
+        file_url=payload.file_url,
+    )
+    db.add(lab_result)
+    await db.commit()
+    await db.refresh(lab_result)
+
+    # Load relations for response
+    query = select(LabResult).options(
+        selectinload(LabResult.patient),
+        selectinload(LabResult.doctor).selectinload(Doctor.staff)
+    ).where(LabResult.id == lab_result.id)
+    lab_loaded = (await db.execute(query)).scalar_one()
+
+    resp = LabResultResponse.model_validate(lab_loaded)
+    resp.patient_name = lab_loaded.patient.full_name if lab_loaded.patient else None
+    resp.doctor_name = lab_loaded.doctor.staff.full_name if (lab_loaded.doctor and lab_loaded.doctor.staff) else None
+    return resp
+

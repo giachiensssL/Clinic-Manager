@@ -80,16 +80,16 @@ export const emrAPI = {
 export const prescriptionsAPI = {
   getAll: (params?: any) => api.get('/prescriptions', { params }),
   getById: (id: string) => api.get(`/prescriptions/${id}`),
-  create: (data: any) => api.post('/prescriptions', null, { params: data }),
-  addItem: (id: string, data: any) => api.post(`/prescriptions/${id}/items`, null, { params: data }),
+  create: (data: any) => api.post('/prescriptions', data),
+  addItem: (id: string, data: any) => api.post(`/prescriptions/${id}/items`, data),
   dispense: (id: string) => api.post(`/prescriptions/${id}/dispense`),
 };
 
 export const billingAPI = {
   getAll: (params?: any) => api.get('/billing', { params }),
   getById: (id: string) => api.get(`/billing/${id}`),
-  create: (data: any) => api.post('/billing', null, { params: data }),
-  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, null, { params: data }),
+  create: (data: any) => api.post('/billing', data),
+  recordPayment: (id: string, data: any) => api.post(`/billing/${id}/payments`, data),
 };
 
 export const aiAPI = {
@@ -147,6 +147,7 @@ export const notificationsAPI = {
 export const labResultsAPI = {
   list: (params?: any) => api.get('/lab-results', { params }),
   getDetail: (id: string) => api.get(`/lab-results/${id}`),
+  create: (data: any) => api.post('/lab-results', data),
 };
 
 export const doctorAPI = {

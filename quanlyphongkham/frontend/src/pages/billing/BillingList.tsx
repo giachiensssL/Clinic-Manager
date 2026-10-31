@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Eye, CreditCard, Clock, CheckCircle2, AlertCircle, DollarSign } from 'lucide-react';
+import { Search, Eye, CreditCard, Clock, CheckCircle2, AlertCircle, DollarSign, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { billingAPI } from '@/services/api';
+import { billingAPI, patientsAPI } from '@/services/api';
+import toast from 'react-hot-toast';
 
 interface Billing {
   id: string;
@@ -50,6 +51,73 @@ export default function BillingList() {
   const [payDialog, setPayDialog] = useState(false);
   const [payMethod, setPayMethod] = useState('cash');
   const [payAmount, setPayAmount] = useState('');
+
+  // Create Invoice State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    patient_id: '',
+    consultation_fee: 150000,
+    medicine_fee: 0,
+    service_fee: 0,
+    insurance_covered: 0,
+    discount: 0,
+    notes: '',
+  });
+
+  useEffect(() => {
+    patientsAPI.getAll({ size: 100 })
+      .then(res => setPatients(res.data.items || []))
+      .catch(() => {});
+  }, []);
+
+  const calculatedTotal = useMemo(() => {
+    const total = (Number(createForm.consultation_fee) || 0) +
+      (Number(createForm.medicine_fee) || 0) +
+      (Number(createForm.service_fee) || 0) -
+      (Number(createForm.insurance_covered) || 0) -
+      (Number(createForm.discount) || 0);
+    return total > 0 ? total : 0;
+  }, [createForm]);
+
+  const handleCreateBilling = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.patient_id) {
+      toast.error('Vui lòng chọn bệnh nhân');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const res = await billingAPI.create({
+        patient_id: createForm.patient_id,
+        consultation_fee: Number(createForm.consultation_fee) || 0,
+        medicine_fee: Number(createForm.medicine_fee) || 0,
+        service_fee: Number(createForm.service_fee) || 0,
+        insurance_covered: Number(createForm.insurance_covered) || 0,
+        discount: Number(createForm.discount) || 0,
+        notes: createForm.notes.trim() || undefined,
+      });
+
+      toast.success(`Tạo hóa đơn thành công! Mã: ${res.data.invoice_code}`);
+      qc.invalidateQueries({ queryKey: ['billing'] });
+      setIsCreateOpen(false);
+      setCreateForm({
+        patient_id: '',
+        consultation_fee: 150000,
+        medicine_fee: 0,
+        service_fee: 0,
+        insurance_covered: 0,
+        discount: 0,
+        notes: '',
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi tạo hóa đơn');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['billing'],
@@ -103,9 +171,14 @@ export default function BillingList() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 ">Quản lý Thanh toán</h1>
-        <p className="text-sm text-slate-500 mt-1">{billings.length} hóa đơn</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 ">Quản lý Thanh toán & Viện phí</h1>
+          <p className="text-sm text-slate-500 mt-1">{billings.length} hóa đơn</p>
+        </div>
+        <Button onClick={() => setIsCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
+          <Plus className="w-4 h-4" /> Lập hóa đơn mới
+        </Button>
       </div>
 
       {/* Stats */}
@@ -283,6 +356,108 @@ export default function BillingList() {
               {payMutation.isPending ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Lập hóa đơn mới */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Lập hóa đơn viện phí mới</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateBilling} className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Bệnh nhân <span className="text-red-500">*</span></label>
+              <select
+                required
+                value={createForm.patient_id}
+                onChange={(e) => setCreateForm({ ...createForm, patient_id: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none"
+              >
+                <option value="">-- Chọn bệnh nhân thanh toán --</option>
+                {patients.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name} ({p.patient_code}) - {p.phone || 'SĐT chưa có'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Tiền khám bệnh (VNĐ)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={createForm.consultation_fee}
+                  onChange={(e) => setCreateForm({ ...createForm, consultation_fee: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Tiền thuốc (VNĐ)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={createForm.medicine_fee}
+                  onChange={(e) => setCreateForm({ ...createForm, medicine_fee: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Tiền dịch vụ / Cận lâm sàng (VNĐ)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={createForm.service_fee}
+                  onChange={(e) => setCreateForm({ ...createForm, service_fee: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">BHYT chi trả (VNĐ)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={createForm.insurance_covered}
+                  onChange={(e) => setCreateForm({ ...createForm, insurance_covered: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Giảm giá / Ưu đãi (VNĐ)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={createForm.discount}
+                  onChange={(e) => setCreateForm({ ...createForm, discount: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col justify-center">
+                <span className="text-xs text-blue-700 font-medium">Tổng tiền cần thu:</span>
+                <span className="text-lg font-bold text-blue-900 mt-0.5">{formatCurrency(calculatedTotal)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Ghi chú hóa đơn</label>
+              <Input
+                placeholder="VD: Thu phí khám bệnh ngoại trú..."
+                value={createForm.notes}
+                onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Hủy</Button>
+              <Button type="submit" disabled={creating} className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
+                {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                {creating ? 'Đang tạo hóa đơn...' : 'Tạo và xuất hóa đơn'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

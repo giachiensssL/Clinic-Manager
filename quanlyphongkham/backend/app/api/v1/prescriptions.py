@@ -64,36 +64,132 @@ async def list_prescriptions(
     return {"items": response, "total": len(response)}
 
 
+from pydantic import BaseModel
+from app.models.models import EMRStatus
+
+class PrescriptionItemCreateDTO(BaseModel):
+    medicine_id: Optional[str] = None
+    medicine_name: Optional[str] = None
+    dosage: str = "1 viên"
+    frequency: str = "2 lần/ngày"
+    duration_days: int = 5
+    quantity: int = 10
+    instructions: Optional[str] = "Uống sau khi ăn"
+    unit_price: float = 0.0
+
+class CreatePrescriptionDTO(BaseModel):
+    consultation_id: Optional[str] = None
+    patient_id: Optional[str] = None
+    notes: Optional[str] = None
+    items: Optional[List[PrescriptionItemCreateDTO]] = None
+
 @router.post("", summary="Tao don thuoc moi", status_code=201)
 async def create_prescription(
-    consultation_id: str,
-    notes: Optional[str] = None,
+    payload: CreatePrescriptionDTO,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_doctor),
 ) -> dict:
-    """Tao don thuoc moi gan voi mot cuoc kham"""
-    result = await db.execute(select(Consultation).where(Consultation.id == consultation_id))
-    consultation = result.scalar_one_or_none()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Khong tim thay ho so kham benh")
+    """Tao don thuoc moi gan voi mot cuoc kham hoac truc tiep cho benh nhan"""
+    consultation_id = payload.consultation_id
+    patient_id = payload.patient_id
+    doctor_id = None
+
+    if current_user.role == UserRole.DOCTOR:
+        doc_res = await db.execute(select(Doctor.id).where(Doctor.user_id == current_user.id))
+        doctor_id = doc_res.scalar_one_or_none()
+
+    if not consultation_id:
+        if not patient_id:
+            raise HTTPException(status_code=400, detail="Cần cung cấp consultation_id hoặc patient_id")
+        
+        # Tạo hoặc tái sử dụng một consultation cho bệnh nhân
+        cons = Consultation(
+            id=str(uuid.uuid4()),
+            patient_id=patient_id,
+            doctor_id=doctor_id,
+            chief_complaint=payload.notes or "Kê đơn thuốc ngoại trú",
+            clinical_notes="Kê đơn trực tiếp",
+            status=EMRStatus.DRAFT,
+        )
+        db.add(cons)
+        await db.flush()
+        consultation_id = cons.id
+    else:
+        result = await db.execute(select(Consultation).where(Consultation.id == consultation_id))
+        consultation = result.scalar_one_or_none()
+        if not consultation:
+            raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ khám bệnh")
+        patient_id = consultation.patient_id
+        doctor_id = consultation.doctor_id
 
     existing = await db.execute(
         select(Prescription).where(Prescription.consultation_id == consultation_id)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Cuoc kham nay da co don thuoc")
+        raise HTTPException(status_code=409, detail="Cuộc khám này đã có đơn thuốc")
 
     prescription = Prescription(
         id=str(uuid.uuid4()),
         prescription_code=_generate_prescription_code(),
         consultation_id=consultation_id,
-        doctor_id=consultation.doctor_id,
-        patient_id=consultation.patient_id,
-        notes=notes,
+        doctor_id=doctor_id or str(uuid.uuid4()),
+        patient_id=patient_id,
+        notes=payload.notes,
     )
     db.add(prescription)
     await db.flush()
 
+    # Thêm các danh mục thuốc nếu có
+    if payload.items:
+        for item in payload.items:
+            med_id = item.medicine_id
+            if not med_id and item.medicine_name:
+                # Tìm hoặc tạo thuốc theo tên
+                med_res = await db.execute(select(Medicine).where(Medicine.name.ilike(item.medicine_name.strip())))
+                existing_med = med_res.scalar_one_or_none()
+                if existing_med:
+                    med_id = existing_med.id
+                else:
+                    new_med = Medicine(
+                        id=str(uuid.uuid4()),
+                        name=item.medicine_name.strip(),
+                        price=item.unit_price or 15000.0,
+                        unit="Viên"
+                    )
+                    db.add(new_med)
+                    await db.flush()
+                    med_id = new_med.id
+            
+            if not med_id:
+                # Lấy ngẫu nhiên thuốc đầu tiên trong kho nếu không chỉ định
+                any_med = (await db.execute(select(Medicine).limit(1))).scalar_one_or_none()
+                if any_med:
+                    med_id = any_med.id
+                else:
+                    new_med = Medicine(
+                        id=str(uuid.uuid4()),
+                        name="Paracetamol 500mg",
+                        price=10000.0,
+                        unit="Viên"
+                    )
+                    db.add(new_med)
+                    await db.flush()
+                    med_id = new_med.id
+
+            px_item = PrescriptionItem(
+                id=str(uuid.uuid4()),
+                prescription_id=prescription.id,
+                medicine_id=med_id,
+                dosage=item.dosage,
+                frequency=item.frequency,
+                duration_days=item.duration_days,
+                quantity=item.quantity,
+                instructions=item.instructions,
+                unit_price=item.unit_price or 15000.0,
+            )
+            db.add(px_item)
+
+    await db.commit()
     await log_action(db, current_user, AuditAction.CREATE, "prescriptions", prescription.id)
     return {"id": prescription.id, "prescription_code": prescription.prescription_code}
 

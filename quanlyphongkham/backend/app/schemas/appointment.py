@@ -15,7 +15,7 @@ class AppointmentCreate(BaseModel):
     """Schema đặt lịch hẹn mới"""
     patient_id: str
     doctor_id: str
-    specialty_id: str
+    specialty_id: Optional[str] = None
     appointment_date: date
     start_time: time
     end_time: time

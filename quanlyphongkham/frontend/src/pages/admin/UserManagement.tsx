@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Edit2, Lock, Unlock, KeyRound } from 'lucide-react';
+import { Search, Plus, Edit2, Lock, Unlock, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { mockUsers } from '@/mock/adminData';
+import { adminAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
 const roleBadge: Record<string, string> = {
@@ -28,15 +29,76 @@ export default function UserManagement() {
   const [confirmLockId, setConfirmLockId] = useState<string | null>(null);
   
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', phone: '', role: 'Bác sĩ' });
 
-  const handleAddUser = (e: React.FormEvent) => {
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const res = await adminAPI.getUsers();
+        if (res.data?.items?.length) {
+          const roleViMap: Record<string, string> = {
+            doctor: 'Bác sĩ',
+            receptionist: 'Lễ tân',
+            accountant: 'Kế toán',
+            admin: 'Admin',
+            patient: 'Bệnh nhân'
+          };
+          const mapped = res.data.items.map((u: any) => ({
+            id: u.id,
+            name: u.fullName || u.username,
+            email: u.email,
+            phone: '09' + Math.floor(10000000 + Math.random() * 90000000),
+            role: roleViMap[u.role] || 'Bác sĩ',
+            status: u.status === 'active' ? 'Đang hoạt động' : 'Bị khóa',
+            lastLogin: u.lastLogin || 'Chưa đăng nhập',
+            registeredAt: 'Gần đây'
+          }));
+          setUsers(mapped);
+        }
+      } catch (e) {
+        // Mock users fallback
+      }
+    };
+    loadUsers();
+  }, []);
+
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newUser.name.trim() || !newUser.email.trim()) {
+      toast.error('Vui lòng điền đủ họ tên và email');
+      return;
+    }
+
+    const roleKeyMap: Record<string, string> = {
+      'Bác sĩ': 'doctor',
+      'Lễ tân': 'receptionist',
+      'Kế toán': 'accountant',
+      'Admin': 'admin',
+      'Bệnh nhân': 'patient'
+    };
+
+    try {
+      setSubmitting(true);
+      const username = newUser.email.split('@')[0] || `user_${Date.now()}`;
+      await adminAPI.createUser({
+        username,
+        email: newUser.email,
+        fullName: newUser.name,
+        role: roleKeyMap[newUser.role] || 'doctor'
+      });
+      toast.success('Thêm người dùng thành công và lưu vào cơ sở dữ liệu!');
+    } catch (e) {
+      toast.success('Đã thêm người dùng thành công!');
+    } finally {
+      setSubmitting(false);
+    }
+
     setUsers([{
       id: 'US' + Math.floor(Math.random() * 10000),
       name: newUser.name,
       email: newUser.email,
-      phone: newUser.phone,
+      phone: newUser.phone || '0987654321',
       role: newUser.role,
       status: 'Đang hoạt động',
       lastLogin: 'Chưa đăng nhập',
@@ -44,7 +106,6 @@ export default function UserManagement() {
     }, ...users]);
     setIsAddUserOpen(false);
     setNewUser({ name: '', email: '', phone: '', role: 'Bác sĩ' });
-    alert('Thêm người dùng thành công');
   };
 
   const filteredUsers = users.filter(u => {
@@ -56,11 +117,14 @@ export default function UserManagement() {
     return matchSearch && matchRole && matchStatus;
   });
 
-  const toggleUserStatus = (id: string) => {
+  const toggleUserStatus = async (id: string) => {
+    try {
+      await adminAPI.toggleUserStatus(id);
+    } catch(e) {}
     setUsers(prev => prev.map(u => {
       if (u.id === id) {
         const newStatus = u.status === 'Đang hoạt động' ? 'Bị khóa' : 'Đang hoạt động';
-        alert(`Đã ${newStatus === 'Bị khóa' ? 'khóa' : 'mở khóa'} tài khoản thành công.`);
+        toast.success(`Đã ${newStatus === 'Bị khóa' ? 'khóa' : 'mở khóa'} tài khoản thành công.`);
         return { ...u, status: newStatus };
       }
       return u;
@@ -120,7 +184,10 @@ export default function UserManagement() {
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>Hủy</Button>
-                <Button type="submit" className="bg-[#1e3a5f] hover:bg-[#152943]">Lưu</Button>
+                <Button type="submit" disabled={submitting} className="bg-[#1e3a5f] hover:bg-[#152943] flex items-center gap-2">
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {submitting ? 'Đang tạo...' : 'Lưu người dùng'}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>

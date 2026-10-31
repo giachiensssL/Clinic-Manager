@@ -259,6 +259,42 @@ async def get_queue_list(db: AsyncSession = Depends(get_db), current_user: User 
         "appointment_code": q.appointment.appointment_code if q.appointment else None
     } for q in items]
 
+class CreateQueueItemDTO(BaseModel):
+    patient_id: str
+    doctor_id: str
+    notes: Optional[str] = None
+
+@router.post("/queue")
+async def create_queue_item(data: CreateQueueItemDTO, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_receptionist)):
+    today = date.today()
+    max_num_query = select(func.max(Queue.queue_number)).where(func.date(Queue.check_in_time) == today)
+    max_num = (await db.execute(max_num_query)).scalar_one_or_none() or 0
+    next_num = max_num + 1
+
+    pat = (await db.execute(select(Patient).where(Patient.id == data.patient_id))).scalar_one_or_none()
+    if not pat: raise HTTPException(404, "Bệnh nhân không tồn tại")
+    doc = (await db.execute(select(Doctor).where(Doctor.id == data.doctor_id))).scalar_one_or_none()
+    if not doc: raise HTTPException(404, "Bác sĩ không tồn tại")
+
+    q = Queue(
+        id=str(uuid.uuid4()),
+        patient_id=data.patient_id,
+        doctor_id=data.doctor_id,
+        queue_number=next_num,
+        check_in_time=_now(),
+        status=QueueStatus.WAITING,
+        created_by=current_user.id
+    )
+    db.add(q)
+    await log_activity(db, current_user, AuditAction.CREATE, "queue", q.id, f"Cấp số #{next_num} cho bệnh nhân {pat.full_name}")
+    await db.commit()
+    return {
+        "id": q.id,
+        "queue_number": q.queue_number,
+        "status": q.status.value,
+        "patient": {"id": pat.id, "full_name": pat.full_name, "patient_code": pat.patient_code}
+    }
+
 @router.patch("/queue/{id}/status")
 async def update_queue_status(id: str, status: str = Body(..., embed=True), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_receptionist)):
     q = (await db.execute(select(Queue).where(Queue.id == id))).scalar_one_or_none()

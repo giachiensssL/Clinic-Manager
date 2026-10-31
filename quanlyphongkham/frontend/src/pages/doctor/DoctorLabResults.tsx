@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Microscope, FileText, CheckCircle, Search, Filter, X } from 'lucide-react';
+import { Microscope, FileText, CheckCircle, Search, Filter, X, Plus, Loader2 } from 'lucide-react';
 import { doctorAPI, labResultsAPI } from '@/services/api';
 import toast from 'react-hot-toast';
 
@@ -11,20 +11,70 @@ export default function DoctorLabResults() {
   const [selectedLab, setSelectedLab] = useState<any>(null);
   const [labLoading, setLabLoading] = useState(false);
 
+  // Create Lab Order State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [formData, setFormData] = useState({
+    patient_id: '',
+    test_name: 'Tổng phân tích tế bào máu ngoại vi',
+    priority: 'normal',
+    notes: ''
+  });
+
+  const fetchResults = async () => {
+    try {
+      setLoading(true);
+      const { data } = await labResultsAPI.list();
+      setResults(data.items || []);
+    } catch (error) {
+      toast.error('Lỗi khi tải kết quả xét nghiệm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        setLoading(true);
-        const { data } = await labResultsAPI.list();
-        setResults(data.items || []);
-      } catch (error) {
-        toast.error('Lỗi khi tải kết quả xét nghiệm');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchResults();
+    doctorAPI.searchPatients('')
+      .then(res => setPatients(res.data.items || []))
+      .catch(() => {});
   }, []);
+
+  const handleCreateLabOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.patient_id) {
+      toast.error('Vui lòng chọn bệnh nhân');
+      return;
+    }
+    if (!formData.test_name.trim()) {
+      toast.error('Vui lòng chọn hoặc nhập loại xét nghiệm');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      await labResultsAPI.create({
+        patient_id: formData.patient_id,
+        test_name: formData.test_name.trim(),
+        notes: formData.notes.trim() || `Chỉ định mức độ: ${formData.priority === 'urgent' ? 'Cấp cứu' : 'Bình thường'}`,
+        status: 'pending'
+      });
+      toast.success('Chỉ định xét nghiệm thành công!');
+      setIsCreateOpen(false);
+      setFormData({
+        patient_id: '',
+        test_name: 'Tổng phân tích tế bào máu ngoại vi',
+        priority: 'normal',
+        notes: ''
+      });
+      fetchResults();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Lỗi khi chỉ định xét nghiệm');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const markAsReviewed = async (id: string) => {
     try {
@@ -74,6 +124,12 @@ export default function DoctorLabResults() {
           <h1 className="text-2xl font-bold text-slate-800">Kết quả xét nghiệm</h1>
           <p className="text-sm text-slate-500 mt-1">Xem và đánh giá các kết quả cận lâm sàng của bệnh nhân</p>
         </div>
+        <button 
+          onClick={() => setIsCreateOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm text-sm"
+        >
+          <Plus className="w-4 h-4" /> Chỉ định xét nghiệm mới
+        </button>
       </div>
 
       <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
@@ -216,6 +272,134 @@ export default function DoctorLabResults() {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Chỉ định xét nghiệm mới */}
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Chỉ định xét nghiệm cận lâm sàng</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Tạo phiếu yêu cầu xét nghiệm hoặc chẩn đoán hình ảnh cho bệnh nhân</p>
+              </div>
+              <button 
+                onClick={() => setIsCreateOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateLabOrder} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Chọn bệnh nhân <span className="text-red-500">*</span></label>
+                <select
+                  required
+                  value={formData.patient_id}
+                  onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Chọn bệnh nhân --</option>
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name} ({p.patient_code}) - {p.phone || 'SĐT chưa có'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Loại xét nghiệm / Kỹ thuật <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.test_name}
+                  onChange={(e) => setFormData({ ...formData, test_name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none mb-2"
+                >
+                  <option value="Tổng phân tích tế bào máu ngoại vi">Tổng phân tích tế bào máu ngoại vi (Laser)</option>
+                  <option value="Sinh hóa máu (Glucose, Creatinin, Men gan GOT/GPT)">Sinh hóa máu (Glucose, Creatinin, Men gan GOT/GPT)</option>
+                  <option value="Tổng phân tích nước tiểu 10 thông số">Tổng phân tích nước tiểu 10 thông số</option>
+                  <option value="X-Quang ngực thẳng kỹ thuật số (CR/DR)">X-Quang ngực thẳng kỹ thuật số (CR/DR)</option>
+                  <option value="Siêu âm ổ bụng tổng quát">Siêu âm ổ bụng tổng quát</option>
+                  <option value="Siêu âm tim Doppler màu">Siêu âm tim Doppler màu</option>
+                  <option value="Điện tâm đồ ECG 12 chuyển đạo">Điện tâm đồ ECG 12 chuyển đạo</option>
+                  <option value="Nội soi thực quản - dạ dày - tá tràng">Nội soi thực quản - dạ dày - tá tràng</option>
+                  <option value="custom">-- Nhập tên xét nghiệm khác --</option>
+                </select>
+                {formData.test_name === 'custom' && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nhập tên xét nghiệm cụ thể..."
+                    onChange={(e) => setFormData({ ...formData, test_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ ưu tiên</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer text-sm font-medium transition-all ${
+                    formData.priority === 'normal' ? 'border-blue-500 bg-blue-50/50 text-blue-700' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="priority"
+                      value="normal"
+                      checked={formData.priority === 'normal'}
+                      onChange={() => setFormData({ ...formData, priority: 'normal' })}
+                      className="hidden"
+                    />
+                    Bình thường (Thường quy)
+                  </label>
+                  <label className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer text-sm font-medium transition-all ${
+                    formData.priority === 'urgent' ? 'border-red-500 bg-red-50/50 text-red-700' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="priority"
+                      value="urgent"
+                      checked={formData.priority === 'urgent'}
+                      onChange={() => setFormData({ ...formData, priority: 'urgent' })}
+                      className="hidden"
+                    />
+                    Khẩn cấp / Cấp cứu (STAT)
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Chẩn đoán lâm sàng & Ghi chú kỹ thuật viên</label>
+                <textarea
+                  rows={3}
+                  placeholder="Ghi chú lâm sàng phục vụ định hướng xét nghiệm..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {creating ? 'Đang gửi chỉ định...' : 'Gửi chỉ định xét nghiệm'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
