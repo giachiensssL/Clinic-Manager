@@ -67,12 +67,15 @@ class GeminiKeyManager:
 
     def get_model_name(self) -> str:
         """
-        Trả về tên model phù hợp với key hiện tại.
-        Key 1 (cũ) dùng gemini-2.5-flash, các Key mới dùng gemini-3.8-flash.
+        Trả về tên model phù hợp.
+        Ưu tiên 'gemini-flash-lite-latest' vì có hạn mức quota cao, phản hồi nhanh (<1.5s),
+        và hỗ trợ đầy đủ Function Calling trên tất cả các API key.
         """
-        if self._current_index == 0:
-            return "gemini-2.5-flash"
-        return "gemini-3.8-flash"
+        return "gemini-flash-lite-latest"
+
+    def get_fallback_model_name(self) -> str:
+        """Model dự phòng khi model chính gặp sự cố tạm thời."""
+        return "gemini-3.1-flash-lite"
 
     def configure_genai(self):
         """Cấu hình genai với key hiện tại."""

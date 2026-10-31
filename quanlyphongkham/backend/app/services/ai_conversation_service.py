@@ -42,6 +42,10 @@ class AIConversationService:
         )
         db.add(conv)
         await db.flush()
+        try:
+            await db.commit()
+        except Exception:
+            pass
         return conv
 
     async def soft_delete_conversation(self, db: AsyncSession, conversation_id: str, user_id: str) -> bool:
@@ -52,6 +56,10 @@ class AIConversationService:
         ).values(is_active=False)
         result = await db.execute(stmt)
         await db.flush()
+        try:
+            await db.commit()
+        except Exception:
+            pass
         return result.rowcount > 0
 
     async def rename_conversation(self, db: AsyncSession, conversation_id: str, user_id: str, new_title: str) -> bool:
@@ -61,6 +69,10 @@ class AIConversationService:
         ).values(title=new_title)
         result = await db.execute(stmt)
         await db.flush()
+        try:
+            await db.commit()
+        except Exception:
+            pass
         return result.rowcount > 0
 
     async def add_message(self, db: AsyncSession, conversation_id: str, role: str, content: str) -> AIMessage:
@@ -80,6 +92,10 @@ class AIConversationService:
         )
         
         await db.flush()
+        try:
+            await db.commit()
+        except Exception:
+            pass
         return msg
 
 ai_conversation_service = AIConversationService()

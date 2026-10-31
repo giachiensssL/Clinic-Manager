@@ -1,117 +1,70 @@
+import json
+import time
+import logging
+import asyncio
+from typing import Optional, AsyncGenerator
+
 import google.generativeai as genai
-from google.generativeai.types import FunctionDeclaration, Tool
+from google.generativeai import protos
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
 from app.core.gemini_key_manager import gemini_key_manager
-from app.models.models import User, UserRole
+from app.models.models import User, UserRole, AuditLog, AuditAction
 from app.services.ai_context_service import ai_context_service
 from app.services.ai_tool_registry import ai_tool_registry
 from app.services.ai_conversation_service import ai_conversation_service
-from typing import Optional
+from app.ai.guardrails.guardrails import InputGuardrail, OutputGuardrail, load_guardrail_rules
 
-def _fallback_chat_response(message: str, role: str) -> str:
-    m = (message or "").lower()
-    if role == "admin":
-        return "Hệ thống AI Cố vấn Quản trị đang tạm thời gặp gián đoạn kết nối tới AI Provider. Dữ liệu quản trị của bạn vẫn an toàn; vui lòng thử lại sau giây lát hoặc tra cứu trực tiếp qua các mục quản trị tương ứng trên hệ thống."
-    if any(k in m for k in ["chào", "xin chào", "hello", "hi"]):
-        return "Xin chào! Tôi đã sẵn sàng hỗ trợ bạn trong phạm vi của hệ thống. Bạn vui lòng mô tả nhu cầu cần tra cứu hoặc xử lý."
-    if "lịch" in m or "appointment" in m:
-        return "Bạn có thể tra cứu lịch hẹn trong mục quản lý lịch. Nếu cần đặt lịch, vui lòng cho biết ngày, giờ và bác sĩ mong muốn."
-    if "doanh thu" in m or "revenue" in m:
-        return "Bạn có thể xem tổng hợp doanh thu trong trang báo cáo. Tôi đang tạm thời không thể phân tích dữ liệu trực tiếp, vui lòng thử lại sau."
-    if "bệnh nhân" in m or "patient" in m:
-        return "Tôi có thể hỗ trợ tra cứu thông tin bệnh nhân trong phạm vi quyền truy cập của tài khoản. Vui lòng cung cấp tên hoặc mã bệnh nhân cần tìm."
-    if "phác đồ" in m or "điều trị" in m or "thuốc" in m:
-        return "Tôi có thể hỗ trợ tra cứu và trình bày thông tin chuyên môn, nhưng không thay thế quyết định lâm sàng của bác sĩ."
-    return "Tôi đã nhận được yêu cầu của bạn. Dịch vụ AI đang có gián đoạn kết nối, vui lòng thử lại sau ít phút hoặc sử dụng các chức năng tra cứu trực tiếp trong hệ thống."
+logger = logging.getLogger(__name__)
 
 
 def _handle_gemini_error(e: Exception) -> str:
-    import asyncio
-    if isinstance(e, asyncio.TimeoutError):
-        return "Hệ thống đang quá tải hoặc phản hồi chậm. Vui lòng đợi vài giây rồi thử lại."
-        
+    """Trả về thông báo thân thiện và trung thực khi dịch vụ AI gặp sự cố kết nối thực tế."""
     err_str = str(e).lower()
-    if "429" in err_str or "quota" in err_str or "exhausted" in err_str:
-        return "Hệ thống đang xử lý quá nhiều yêu cầu. Vui lòng đợi khoảng 15 giây rồi thử lại."
-    if "504" in err_str or "deadline" in err_str or "timeout" in err_str:
-        return "Kết nối bị quá hạn do máy chủ phản hồi chậm. Vui lòng thử lại."
+    if isinstance(e, asyncio.TimeoutError) or "504" in err_str or "deadline" in err_str:
+        return "Máy chủ AI phản hồi chậm hoặc kết nối bị quá hạn. Dữ liệu phòng khám của bạn vẫn an toàn; vui lòng thử lại sau giây lát."
+    if "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str:
+        return "Hệ thống AI đang tiếp nhận nhiều lượt yêu cầu cùng lúc. Vui lòng đợi khoảng 15 giây rồi gửi lại câu hỏi."
     if "503" in err_str or "unavailable" in err_str:
-        return "Dịch vụ AI hiện đang tạm thời gián đoạn. Vui lòng thử lại sau."
-    return "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu của bạn. Vui lòng thử lại."
+        return "Dịch vụ AI hiện đang tạm thời bảo trì hoặc gián đoạn kết nối. Vui lòng thử lại sau ít phút."
+    return "Dịch vụ AI đang tạm thời gián đoạn kết nối. Dữ liệu phòng khám vẫn an toàn; vui lòng thử lại sau ít giây hoặc sử dụng các chức năng tra cứu trực tiếp trong hệ thống."
+
 
 class AICoreService:
     def __init__(self):
         gemini_key_manager.configure_genai()
+        self._cached_rules = None
+        self._rules_time = 0
 
-    async def process_chat(self, db: AsyncSession, user: User, message: str, conversation_id: Optional[str] = None, pending_tool_call: dict = None, action_confirmed: bool = False):
-        # 1. Quản lý Conversation
-        if not conversation_id:
-            # Lấy Title từ prompt đơn giản
-            title = message[:30] + "..." if len(message) > 30 else message
-            conv = await ai_conversation_service.create_conversation(db, user.id, title)
-            conversation_id = conv.id
-        else:
-            conv = await ai_conversation_service.get_conversation(db, conversation_id, user.id)
-            if not conv:
-                raise Exception("Không tìm thấy hội thoại hoặc bạn không có quyền truy cập.")
-
-        # 2. Xử lý logic nếu đây là submit confirmation của High-Risk Action
-        if pending_tool_call and action_confirmed:
-            tool_name = pending_tool_call.get("tool_name")
-            args = pending_tool_call.get("pending_args", {})
-            result = await ai_tool_registry.execute_tool(db, user, tool_name, args, action_confirmed=True)
-            
-            # Ghi message AI hoàn tất
-            msg_content = f"Đã thực hiện xong: {result.get('message', 'Thành công')}"
-            await ai_conversation_service.add_message(db, conversation_id, "user", "(Đã xác nhận hành động)")
-            await ai_conversation_service.add_message(db, conversation_id, "assistant", msg_content)
-            
-            return {
-                "conversation_id": conversation_id,
-                "response": msg_content,
-                "is_tool_call": False
-            }
-
-        # 3. Lưu tin nhắn User
-        await ai_conversation_service.add_message(db, conversation_id, "user", message)
-
-        # 3.5 Check Input Guardrail
-        from app.ai.guardrails.guardrails import InputGuardrail, load_guardrail_rules, OutputGuardrail
-        
-        # Caching guardrail rules to optimize response time
-        if not hasattr(self, "_cached_rules") or getattr(self, "_rules_time", 0) < __import__('time').time() - 60:
+    async def _get_guardrail_rules(self, db: AsyncSession):
+        now = time.time()
+        if self._cached_rules is None or self._rules_time < now - 60:
             self._cached_rules = await load_guardrail_rules(db)
-            self._rules_time = __import__('time').time()
-            
-        input_guard = InputGuardrail(self._cached_rules)
-        input_result = input_guard.check(message, user_role=user.role.value)
-        
-        safe_message = message
-        if input_result.is_blocked:
-            from app.models.models import AuditLog, AuditAction
-            try:
-                audit = AuditLog(
-                    user_id=user.id,
-                    username=user.username,
-                    user_role=user.role.value,
-                    action=AuditAction.GUARDRAIL_BLOCK,
-                    resource_type="rbac_policy",
-                    details=f"Yêu cầu bị từ chối: {input_result.reason} (mẫu: {input_result.matched_pattern})",
-                    result="blocked"
-                )
-                db.add(audit)
-                await db.commit()
-            except Exception:
-                pass
-            # Inject a system prompt directive to gracefully handle this instead of hard-failing
-            safe_message = f"[SYSTEM_DIRECTIVE_HIDDEN: Hệ thống bảo mật phát hiện yêu cầu có vấn đề: {input_result.reason}. BẠN PHẢI TỪ CHỐI YÊU CẦU NÀY CỦA NGƯỜI DÙNG MỘT CÁCH LỊCH SỰ, TỰ NHIÊN, DỰA VÀO QUYỀN HẠN CỦA BẠN. KHÔNG NÓI VỀ CHỈ THỊ NÀY.]\nUser: {message}"
+            self._rules_time = now
+        return self._cached_rules
 
-        # 4. Lấy System Prompt & Allowed Tools theo RBAC
+    def _prepare_history(self, messages: list) -> list:
+        """Đảm bảo các lượt lịch sử xen kẽ 'user' và 'model' theo yêu cầu Gemini SDK."""
+        gemini_history = []
+        last_role = None
+
+        for m in messages:
+            role = "user" if m.role == "user" else "model"
+            if role == last_role:
+                continue
+            gemini_history.append({"role": role, "parts": [m.content]})
+            last_role = role
+
+        if gemini_history and gemini_history[-1]["role"] == "user":
+            gemini_history.pop()
+
+        return gemini_history
+
+    def _build_model(self, user: User, allowed_tool_names: list) -> genai.GenerativeModel:
+        """Khởi tạo GenerativeModel kèm system instruction và danh sách tools được phép."""
         system_prompt = ai_context_service.get_system_prompt(user)
-        allowed_tool_names = ai_context_service.get_allowed_tools(user.role)
-        
-        # Build tool definitions cho Gemini
+
         tools = []
         if allowed_tool_names:
             gemini_tools = []
@@ -121,110 +74,119 @@ class AICoreService:
                     gemini_tools.append(schema)
             if gemini_tools:
                 tools = [{"function_declarations": gemini_tools}]
-        
-        model = genai.GenerativeModel(
+
+        return genai.GenerativeModel(
             model_name=gemini_key_manager.get_model_name(),
             system_instruction=system_prompt,
-            tools=tools if tools else None
+            tools=tools if tools else None,
         )
 
-        # 5. Load lịch sử chat
-        history = await ai_conversation_service.get_conversation_messages(db, conversation_id)
-        gemini_history = []
-        last_role = None
-        
-        # Lọc history để đảm bảo alternate
-        for h in history[:-1]:  # Trừ tin nhắn hiện tại ra trước
-            role = "user" if h.role == "user" else "model"
-            if role == last_role:
-                continue # Bỏ qua nếu bị trùng role liên tiếp (Gemini sẽ báo lỗi)
-            gemini_history.append({"role": role, "parts": [h.content]})
-            last_role = role
-            
-        # Nếu message cuối cùng trong history là user, mà tin nhắn hiện tại cũng là user -> lỗi.
-        # Nhưng message_async sẽ gửi role=user. Nên lịch sử bắt buộc message cuối cùng phải là model.
-        if gemini_history and gemini_history[-1]["role"] == "user":
-            gemini_history.pop() # Xóa tin nhắn user thừa ở cuối
-            
+    async def process_chat(
+        self,
+        db: AsyncSession,
+        user: User,
+        message: str,
+        conversation_id: Optional[str] = None,
+        pending_tool_call: dict = None,
+        action_confirmed: bool = False,
+    ) -> dict:
+        """
+        Xử lý hội thoại AI đồng bộ (REST API) với cơ chế Tool Calling tự nhiên.
+        """
+        # 1. Quản lý Conversation
+        if not conversation_id:
+            title = message[:35] + "..." if len(message) > 35 else message
+            conv = await ai_conversation_service.create_conversation(db, user.id, title)
+            conversation_id = conv.id
+        else:
+            conv = await ai_conversation_service.get_conversation(db, conversation_id, user.id)
+            if not conv:
+                raise Exception("Không tìm thấy hội thoại hoặc bạn không có quyền truy cập.")
+
+        # 2. Xử lý xác nhận hành động nguy cơ cao (Confirmation)
+        if pending_tool_call and action_confirmed:
+            tool_name = pending_tool_call.get("tool_name")
+            args = pending_tool_call.get("pending_args", {})
+            result = await ai_tool_registry.execute_tool(db, user, tool_name, args, action_confirmed=True)
+
+            msg_content = f"Đã thực hiện xong: {result.get('message', 'Thành công')}"
+            await ai_conversation_service.add_message(db, conversation_id, "user", "(Đã xác nhận thực hiện hành động)")
+            await ai_conversation_service.add_message(db, conversation_id, "assistant", msg_content)
+
+            return {
+                "conversation_id": conversation_id,
+                "response": msg_content,
+                "is_tool_call": False,
+            }
+
+        # 3. Lưu tin nhắn User vào lịch sử
+        await ai_conversation_service.add_message(db, conversation_id, "user", message)
+
+        # 4. Kiểm tra Input Guardrail
+        rules = await self._get_guardrail_rules(db)
+        input_guard = InputGuardrail(rules)
+        input_result = input_guard.check(message, user_role=user.role.value)
+
+        safe_message = message
+        if input_result.is_blocked:
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    username=user.username,
+                    user_role=user.role.value,
+                    action=AuditAction.GUARDRAIL_BLOCK,
+                    resource_type="rbac_policy",
+                    details=f"Yêu cầu bị từ chối: {input_result.reason} (mẫu: {input_result.matched_pattern})",
+                    result="blocked",
+                )
+                db.add(audit)
+                await db.commit()
+            except Exception:
+                pass
+            safe_message = (
+                f"[SYSTEM_DIRECTIVE_HIDDEN: Yêu cầu của người dùng vi phạm quy tắc an toàn: {input_result.reason}. "
+                f"Hãy từ chối lịch sự, ân cần và giải thích giới hạn quyền hạn theo vai trò của bạn.]\n"
+                f"Tin nhắn người dùng: {message}"
+            )
+
+        # 5. Khởi tạo Model và Chat Session
+        allowed_tool_names = ai_context_service.get_allowed_tools(user.role)
+        model = self._build_model(user, allowed_tool_names)
+
+        history_msgs = await ai_conversation_service.get_conversation_messages(db, conversation_id)
+        # Bỏ tin nhắn vừa thêm ở bước 3 khỏi history ban đầu để tránh trùng
+        gemini_history = self._prepare_history(history_msgs[:-1])
         chat = model.start_chat(history=gemini_history)
-        
-        # 6. Gửi request — tự động rotate key nếu gặp quota error
-        try:
-            import asyncio
-            for _attempt in range(len(gemini_key_manager._keys)):
-                try:
-                    gemini_key_manager.configure_genai()
-                    # Sử dụng timeout 12.0s để không làm treo giao diện người dùng
-                    response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=12.0)
-                    break
-                except Exception as _e:
-                    if gemini_key_manager._is_quota_error(_e) or isinstance(_e, asyncio.TimeoutError):
-                        new_key = gemini_key_manager.rotate()
-                        if new_key is None:
-                            raise
-                        # Re-build model và chat với key mới
-                        gemini_key_manager.configure_genai()
-                        model = genai.GenerativeModel(
-                            model_name=gemini_key_manager.get_model_name(),
-                            system_instruction=system_prompt,
-                            tools=tools if tools else None
-                        )
-                        chat = model.start_chat(history=gemini_history)
-                        await asyncio.sleep(0.5)
-                    else:
-                        raise
-        except Exception as e:
-            # Nếu là Quản trị viên (Admin), tự động kích hoạt AdminAISynthesizer với 100% dữ liệu thực từ Database
-            if user.role == UserRole.ADMIN:
-                from app.services.admin_ai_synthesizer import AdminAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
 
-            # Nếu là Bác sĩ (Doctor), tự động kích hoạt DoctorAISynthesizer với 100% dữ liệu thực từ Database
-            if user.role == UserRole.DOCTOR:
-                from app.services.doctor_ai_synthesizer import DoctorAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = DoctorAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await DoctorAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+        # 6. Gửi tin nhắn tới Gemini kèm Key Rotation
+        response = None
+        for attempt in range(len(gemini_key_manager._keys)):
+            try:
+                gemini_key_manager.configure_genai()
+                response = await asyncio.wait_for(chat.send_message_async(safe_message), timeout=25.0)
+                break
+            except Exception as e:
+                logger.warning(f"Gemini API attempt {attempt + 1} failed: {e}")
+                if gemini_key_manager._is_quota_error(e) or isinstance(e, asyncio.TimeoutError):
+                    new_key = gemini_key_manager.rotate()
+                    if new_key is None:
+                        error_msg = _handle_gemini_error(e)
+                        await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
+                        return {"conversation_id": conversation_id, "response": error_msg, "is_tool_call": False}
+                    model = self._build_model(user, allowed_tool_names)
+                    chat = model.start_chat(history=gemini_history)
+                    await asyncio.sleep(0.5)
+                else:
+                    error_msg = _handle_gemini_error(e)
+                    await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
+                    return {"conversation_id": conversation_id, "response": error_msg, "is_tool_call": False}
 
-            # Nếu là Bệnh nhân (Patient), tự động kích hoạt PatientAISynthesizer với 100% dữ liệu thực từ Database
-            if user.role == UserRole.PATIENT:
-                from app.services.patient_ai_synthesizer import PatientAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = PatientAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await PatientAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
+        if not response:
+            fallback = "Dịch vụ AI đang tạm thời không phản hồi. Vui lòng thử lại sau ít giây."
+            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback)
+            return {"conversation_id": conversation_id, "response": fallback, "is_tool_call": False}
 
-            # Nếu là Lễ tân (Receptionist), tự động kích hoạt ReceptionistAISynthesizer với 100% dữ liệu thực từ Database
-            if user.role == UserRole.RECEPTIONIST:
-                from app.services.receptionist_ai_synthesizer import ReceptionistAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = ReceptionistAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await ReceptionistAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
-
-            # Nếu là Kế toán (Accountant), tự động kích hoạt AccountantAISynthesizer với 100% dữ liệu thực từ Database
-            if user.role == UserRole.ACCOUNTANT:
-                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                return {"conversation_id": conversation_id, "response": synthesized, "is_tool_call": False}
-
-            fallback_msg = _fallback_chat_response(message, user.role.value)
-            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
-            return {"conversation_id": conversation_id, "response": fallback_msg}
-
-            
-        # 7. Check Function Calling Loop
+        # 7. Vòng lặp Function Calling đa lượt (tối đa 5 lượt)
         max_turns = 5
         turn_count = 0
         while turn_count < max_turns:
@@ -232,30 +194,27 @@ class AICoreService:
             func_calls = [part.function_call for part in response.parts if part.function_call]
             if not func_calls:
                 break
-                
+
             fc = func_calls[0]
             func_name = fc.name
             args = {k: v for k, v in fc.args.items()}
-            
-            # Nếu tool này không nằm trong whitelist -> Rejected
+
             if func_name not in allowed_tool_names:
-                error_msg = f"Tôi không có quyền thực hiện hành động này: {func_name}."
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
-                return {"conversation_id": conversation_id, "response": error_msg}
-                
-            # Thực thi tool
+                refusal_msg = f"Tôi không có thẩm quyền truy cập chức năng '{func_name}' theo phân quyền tài khoản của bạn."
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", refusal_msg)
+                return {"conversation_id": conversation_id, "response": refusal_msg, "is_tool_call": False}
+
+            # Thực thi tool trên Database thực tế
             try:
                 tool_result = await ai_tool_registry.execute_tool(db, user, func_name, args, action_confirmed=False)
             except Exception as e:
-                import traceback
-                traceback.print_exc()
-                error_msg = f"Lỗi hệ thống khi thực thi chức năng {func_name}: {str(e)}"
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
-                return {"conversation_id": conversation_id, "response": error_msg}
-            
-            # Nếu là high-risk action cần confirm:
+                logger.error(f"Error executing tool {func_name}: {e}")
+                err_msg = f"Đã xảy ra lỗi khi truy xuất dữ liệu từ hệ thống ({func_name}). Vui lòng thử lại."
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", err_msg)
+                return {"conversation_id": conversation_id, "response": err_msg, "is_tool_call": False}
+
+            # Nếu hành động yêu cầu xác nhận từ người dùng
             if isinstance(tool_result, dict) and tool_result.get("requires_confirmation"):
-                # Không lưu vào history ngay, đợi user trả lời YES/NO
                 return {
                     "conversation_id": conversation_id,
                     "response": tool_result["confirmation_message"],
@@ -264,31 +223,26 @@ class AICoreService:
                         "tool_name": func_name,
                         "requires_confirmation": True,
                         "confirmation_message": tool_result["confirmation_message"],
-                        "data": tool_result
-                    }
+                        "data": tool_result,
+                    },
                 }
-                
-            # Nếu chạy thẳng thành công (read-only action), trả data về lại cho Gemini dệt câu trả lời
-            try:
-                import asyncio
-                response = await asyncio.wait_for(
-                    chat.send_message_async(
-                        {
-                            "function_response": {
-                                "name": func_name,
-                                "response": tool_result
-                            }
-                        }
-                    ), timeout=60.0
-                )
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                fallback_msg = _fallback_chat_response(message, user.role.value)
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
-                return {"conversation_id": conversation_id, "response": fallback_msg}
 
-        # 8. Trả về text cuối cùng
+            # Gửi kết quả tool về cho Gemini để tổng hợp câu trả lời
+            try:
+                part = protos.Part(
+                    function_response=protos.FunctionResponse(
+                        name=func_name,
+                        response={"result": str(tool_result)}
+                    )
+                )
+                response = await asyncio.wait_for(chat.send_message_async(part), timeout=30.0)
+            except Exception as e:
+                logger.error(f"Error returning tool response to Gemini: {e}")
+                fallback_msg = _handle_gemini_error(e)
+                await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+                return {"conversation_id": conversation_id, "response": fallback_msg, "is_tool_call": False}
+
+        # 8. Trích xuất phản hồi văn bản cuối cùng
         try:
             final_text = response.text
         except Exception:
@@ -297,50 +251,40 @@ class AICoreService:
                 for part in response.parts:
                     if part.text:
                         final_text += part.text
-            if not final_text:
-                final_text = "Tôi đã xử lý yêu cầu nhưng không thể tạo phản hồi chữ hợp lệ. Vui lòng thử lại."
 
-        # Kiểm tra riêng cho Admin: Không được hỏi ngược lại hoặc từ chối sai thẩm quyền
-        if user.role == UserRole.ADMIN:
-            lower_res = final_text.lower()
-            unwanted_patterns = [
-                "bạn có muốn tôi", "có muốn tôi làm", "bạn có muốn", 
-                "không thể thống kê lượng bệnh nhân", "chức năng này không có sẵn"
-            ]
-            if any(p in lower_res for p in unwanted_patterns):
-                from app.services.admin_ai_synthesizer import AdminAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
-                final_text = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
+        if not final_text or not final_text.strip():
+            final_text = "Tôi đã xử lý yêu cầu nhưng chưa nhận được phản hồi phù hợp từ hệ thống. Vui lòng diễn đạt lại câu hỏi."
 
-        # Kiểm tra riêng cho Kế toán: Đảm bảo phản hồi luôn đủ cấu trúc 5 phần & số liệu chính xác
-        if user.role == UserRole.ACCOUNTANT:
-            if "1. Kết quả tổng quan" not in final_text or "2. Bảng số liệu chi tiết" not in final_text:
-                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
-                final_text = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-
-        # 8.5 Kiểm tra output bằng guardrail
-        output_guard = OutputGuardrail()
-        out_res = output_guard.check(final_text, user_role=user.role.value)
+        # 9. Kiểm tra Output Guardrail
+        out_res = OutputGuardrail().check(final_text, user_role=user.role.value)
         if out_res.is_blocked:
-            final_text = "Xin lỗi, tôi phát hiện thông tin chi tiết liên quan đến y khoa hoặc chẩn đoán không được phép hiển thị tự động. Vui lòng liên hệ trực tiếp bác sĩ để được tư vấn thêm."
-                
+            final_text = (
+                "Xin lỗi, nội dung phản hồi có chứa thông tin vượt giới hạn tư vấn y tế tự động. "
+                "Vui lòng liên hệ trực tiếp bác sĩ chuyên khoa hoặc nhân viên y tế để được tư vấn chính xác."
+            )
+
+        # 10. Lưu tin nhắn Assistant vào Database
         await ai_conversation_service.add_message(db, conversation_id, "assistant", final_text)
-        
+
         return {
             "conversation_id": conversation_id,
             "response": final_text,
-            "is_tool_call": False
+            "is_tool_call": False,
         }
 
-
-    async def process_chat_stream(self, db: AsyncSession, user: User, message: str, conversation_id: Optional[str] = None):
-        import json
+    async def process_chat_stream(
+        self,
+        db: AsyncSession,
+        user: User,
+        message: str,
+        conversation_id: Optional[str] = None,
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Xử lý hội thoại AI dạng Streaming (Server-Sent Events) với cơ chế Tool Calling tự nhiên.
+        """
         # 1. Quản lý Conversation
         if not conversation_id:
-            title = message[:30] + "..." if len(message) > 30 else message
+            title = message[:35] + "..." if len(message) > 35 else message
             conv = await ai_conversation_service.create_conversation(db, user.id, title)
             conversation_id = conv.id
         else:
@@ -349,21 +293,16 @@ class AICoreService:
                 yield {"error": "Không tìm thấy hội thoại."}
                 return
 
-        # 3. Lưu tin nhắn User
+        # 2. Lưu tin nhắn User
         await ai_conversation_service.add_message(db, conversation_id, "user", message)
 
-        # 3.5 Check Input Guardrail
-        from app.ai.guardrails.guardrails import InputGuardrail, load_guardrail_rules, OutputGuardrail
-        if not hasattr(self, "_cached_rules") or getattr(self, "_rules_time", 0) < __import__('time').time() - 60:
-            self._cached_rules = await load_guardrail_rules(db)
-            self._rules_time = __import__('time').time()
-            
-        input_guard = InputGuardrail(self._cached_rules)
+        # 3. Kiểm tra Input Guardrail
+        rules = await self._get_guardrail_rules(db)
+        input_guard = InputGuardrail(rules)
         input_result = input_guard.check(message, user_role=user.role.value)
-        
+
         safe_message = message
         if input_result.is_blocked:
-            from app.models.models import AuditLog, AuditAction
             try:
                 audit = AuditLog(
                     user_id=user.id,
@@ -372,91 +311,67 @@ class AICoreService:
                     action=AuditAction.GUARDRAIL_BLOCK,
                     resource_type="rbac_policy",
                     details=f"Yêu cầu bị từ chối: {input_result.reason} (mẫu: {input_result.matched_pattern})",
-                    result="blocked"
+                    result="blocked",
                 )
                 db.add(audit)
                 await db.commit()
             except Exception:
                 pass
-            safe_message = f"[SYSTEM_DIRECTIVE_HIDDEN: Yêu cầu bị chặn do: {input_result.reason}. TỪ CHỐI LỊCH SỰ, GIẢI THÍCH GIỚI HẠN QUYỀN HẠN.] {message}"
+            safe_message = (
+                f"[SYSTEM_DIRECTIVE_HIDDEN: Yêu cầu của người dùng vi phạm quy tắc an toàn: {input_result.reason}. "
+                f"Hãy từ chối lịch sự, ân cần và giải thích giới hạn quyền hạn theo vai trò của bạn.]\n"
+                f"Tin nhắn người dùng: {message}"
+            )
 
         # 4. Context & Tools
-        system_prompt = ai_context_service.get_system_prompt(user)
         allowed_tool_names = ai_context_service.get_allowed_tools(user.role)
-        
-        tools = []
-        if allowed_tool_names:
-            gemini_tools = []
-            for t_name in allowed_tool_names:
-                schema = ai_tool_registry.get_tool_schema(t_name)
-                if schema:
-                    gemini_tools.append(schema)
-            if gemini_tools:
-                tools = [{"function_declarations": gemini_tools}]
-        
-        model = genai.GenerativeModel(
-            model_name=gemini_key_manager.get_model_name(),
-            system_instruction=system_prompt,
-            tools=tools if tools else None
-        )
+        model = self._build_model(user, allowed_tool_names)
 
-        history = await ai_conversation_service.get_conversation_messages(db, conversation_id)
-        gemini_history = []
-        last_role = None
-        for h in history[:-1]:
-            role = "user" if h.role == "user" else "model"
-            if role == last_role: continue
-            gemini_history.append({"role": role, "parts": [h.content]})
-            last_role = role
-            
-        if gemini_history and gemini_history[-1]["role"] == "user":
-            gemini_history.pop()
-            
+        history_msgs = await ai_conversation_service.get_conversation_messages(db, conversation_id)
+        gemini_history = self._prepare_history(history_msgs[:-1])
         chat = model.start_chat(history=gemini_history)
-        
-        # Output info first
+
         yield {"conversation_id": conversation_id, "status": "started"}
 
         try:
-            import asyncio
+            # 5. Gửi message đầu tiên có streaming
+            response_generator = None
+            for attempt in range(len(gemini_key_manager._keys)):
+                try:
+                    gemini_key_manager.configure_genai()
+                    response_generator = await asyncio.wait_for(
+                        chat.send_message_async(safe_message, stream=True),
+                        timeout=30.0
+                    )
+                    break
+                except Exception as e:
+                    logger.warning(f"Stream attempt {attempt + 1} failed: {e}")
+                    if gemini_key_manager._is_quota_error(e) or isinstance(e, asyncio.TimeoutError):
+                        new_key = gemini_key_manager.rotate()
+                        if new_key is None:
+                            error_text = _handle_gemini_error(e)
+                            yield {"chunk": error_text}
+                            yield {"status": "done"}
+                            await ai_conversation_service.add_message(db, conversation_id, "assistant", error_text)
+                            return
+                        model = self._build_model(user, allowed_tool_names)
+                        chat = model.start_chat(history=gemini_history)
+                        await asyncio.sleep(0.5)
+                    else:
+                        error_text = _handle_gemini_error(e)
+                        yield {"chunk": error_text}
+                        yield {"status": "done"}
+                        await ai_conversation_service.add_message(db, conversation_id, "assistant", error_text)
+                        return
 
-            # Hàm helper để gửi request có rotation
-            async def _send_with_rotation(chat_obj, model_factory):
-                for _attempt in range(len(gemini_key_manager._keys)):
-                    try:
-                        gemini_key_manager.configure_genai()
-                        return await asyncio.wait_for(
-                            chat_obj.send_message_async(safe_message, stream=True),
-                            timeout=60.0
-                        )
-                    except Exception as _e:
-                        if gemini_key_manager._is_quota_error(_e):
-                            new_key = gemini_key_manager.rotate()
-                            if new_key is None:
-                                raise
-                            gemini_key_manager.configure_genai()
-                            chat_obj = model_factory().start_chat(history=gemini_history)
-                            await asyncio.sleep(1)
-                        else:
-                            raise
-                raise RuntimeError("Tất cả API key đã hết quota.")
-
-            def make_model():
-                return genai.GenerativeModel(
-                    model_name=gemini_key_manager.get_model_name(),
-                    system_instruction=system_prompt,
-                    tools=tools if tools else None
-                )
-
-            response_generator = await _send_with_rotation(chat, make_model)
-            
             turn_count = 0
             final_text = ""
-            
+
+            # 6. Vòng lặp xử lý Function Calling trong Streaming
             while turn_count < 5:
                 turn_count += 1
                 func_calls = []
-                
+
                 async for chunk in response_generator:
                     try:
                         for part in chunk.parts:
@@ -467,24 +382,26 @@ class AICoreService:
                                 yield {"chunk": part.text}
                     except ValueError:
                         pass
-                
+
                 if not func_calls:
                     break
-                    
+
                 fc = func_calls[0]
                 func_name = fc.name
                 args = {k: v for k, v in fc.args.items()}
-                
+
                 yield {"status": "tool_call", "tool_name": func_name}
-                
+
                 if func_name not in allowed_tool_names:
                     error_msg = f"Tôi không có quyền thực hiện hành động này: {func_name}."
                     await ai_conversation_service.add_message(db, conversation_id, "assistant", error_msg)
                     yield {"chunk": error_msg}
+                    yield {"status": "done"}
                     return
-                    
+
                 tool_result = await ai_tool_registry.execute_tool(db, user, func_name, args, action_confirmed=False)
 
+                # Kiểm tra yêu cầu xác nhận
                 if isinstance(tool_result, dict) and tool_result.get("requires_confirmation"):
                     confirmation = {
                         "is_tool_call": True,
@@ -495,113 +412,44 @@ class AICoreService:
                             "data": tool_result,
                         },
                         "conversation_id": conversation_id,
+                        "status": "awaiting_confirmation",
                     }
                     yield confirmation
-                    yield {"status": "awaiting_confirmation"}
                     return
-                
-                response_generator = await asyncio.wait_for(
-                    chat.send_message_async({"function_response": {"name": func_name, "response": tool_result}}, stream=True), 
-                    timeout=60.0
+
+                # Đóng gói và trả kết quả tool về cho Gemini
+                part = protos.Part(
+                    function_response=protos.FunctionResponse(
+                        name=func_name,
+                        response={"result": str(tool_result)}
+                    )
                 )
-                
+                response_generator = await asyncio.wait_for(
+                    chat.send_message_async(part, stream=True),
+                    timeout=30.0
+                )
+
             if not final_text.strip():
                 final_text = "Tôi đã xử lý yêu cầu nhưng chưa nhận được phản hồi phù hợp. Vui lòng thử lại hoặc diễn đạt yêu cầu cụ thể hơn."
 
+            # Kiểm tra Output Guardrail
             out_res = OutputGuardrail().check(final_text, user_role=user.role.value)
             if out_res.is_blocked:
-                final_text = "Xin lỗi, tôi phát hiện nội dung nhạy cảm hoặc vượt giới hạn tư vấn. Vui lòng liên hệ bác sĩ để được hỗ trợ trực tiếp."
-                yield {"chunk": final_text}
-            
+                final_text = (
+                    "Xin lỗi, nội dung phản hồi có chứa thông tin vượt giới hạn tư vấn y tế tự động. "
+                    "Vui lòng liên hệ trực tiếp bác sĩ chuyên khoa để được hỗ trợ chuyên môn."
+                )
+                yield {"chunk": f"\n\n{final_text}"}
+
             await ai_conversation_service.add_message(db, conversation_id, "assistant", final_text)
             yield {"status": "done"}
-            
+
         except Exception as e:
-            if user.role == UserRole.ADMIN:
-                from app.services.admin_ai_synthesizer import AdminAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AdminAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await AdminAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools)
-                
-                # Stream chunk từng từ để tạo trải nghiệm trực quan mượt mà
-                words = synthesized.split(" ")
-                for i, w in enumerate(words):
-                    chunk_text = w + (" " if i < len(words) - 1 else "")
-                    yield {"chunk": chunk_text}
-                    await asyncio.sleep(0.01)
-                
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                yield {"status": "done"}
-                return
-
-            if user.role == UserRole.DOCTOR:
-                from app.services.doctor_ai_synthesizer import DoctorAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = DoctorAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await DoctorAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                
-                words = synthesized.split(" ")
-                for i, w in enumerate(words):
-                    chunk_text = w + (" " if i < len(words) - 1 else "")
-                    yield {"chunk": chunk_text}
-                    await asyncio.sleep(0.01)
-                
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                yield {"status": "done"}
-                return
-
-            if user.role == UserRole.PATIENT:
-                from app.services.patient_ai_synthesizer import PatientAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = PatientAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await PatientAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                
-                words = synthesized.split(" ")
-                for i, w in enumerate(words):
-                    chunk_text = w + (" " if i < len(words) - 1 else "")
-                    yield {"chunk": chunk_text}
-                    await asyncio.sleep(0.01)
-                
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                yield {"status": "done"}
-                return
-
-            if user.role == UserRole.RECEPTIONIST:
-                from app.services.receptionist_ai_synthesizer import ReceptionistAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = ReceptionistAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await ReceptionistAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                
-                words = synthesized.split(" ")
-                for i, w in enumerate(words):
-                    chunk_text = w + (" " if i < len(words) - 1 else "")
-                    yield {"chunk": chunk_text}
-                    await asyncio.sleep(0.01)
-                
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                yield {"status": "done"}
-                return
-
-            if user.role == UserRole.ACCOUNTANT:
-                from app.services.accountant_ai_synthesizer import AccountantAISynthesizer
-                prev_ctx = gemini_history[-1]["parts"][0] if gemini_history else ""
-                intent = AccountantAISynthesizer.detect_intent(message, prev_ctx)
-                synthesized = await AccountantAISynthesizer.synthesize_response(db, user, message, intent, ai_tool_registry.tools, prev_ctx)
-                
-                words = synthesized.split(" ")
-                for i, w in enumerate(words):
-                    chunk_text = w + (" " if i < len(words) - 1 else "")
-                    yield {"chunk": chunk_text}
-                    await asyncio.sleep(0.01)
-                
-                await ai_conversation_service.add_message(db, conversation_id, "assistant", synthesized)
-                yield {"status": "done"}
-                return
-
-            fallback_msg = _fallback_chat_response(message, user.role.value)
-            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+            logger.error(f"Error in process_chat_stream: {e}")
+            fallback_msg = _handle_gemini_error(e)
             yield {"chunk": fallback_msg}
             yield {"status": "done"}
+            await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
 
 
 ai_core_service = AICoreService()

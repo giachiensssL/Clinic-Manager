@@ -2,7 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { aiAPI } from '@/services/api';
 import toast from 'react-hot-toast';
-import { Send, Menu, Plus, MessageSquare, Trash2, Check, X, Bot, Paperclip, ChevronRight, Activity, Calendar, Users, FileText, AlertTriangle } from 'lucide-react';
+import { 
+  Send, Menu, Plus, MessageSquare, Trash2, Check, X, Bot, Paperclip, 
+  ChevronRight, Activity, Calendar, Users, FileText, AlertTriangle,
+  Square, RotateCcw, Copy, ThumbsUp, ThumbsDown, Sparkles, Database, RefreshCw
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import ReactMarkdown from 'react-markdown';
@@ -193,12 +197,60 @@ export default function UnifiedAIChatSystem() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingTool, setPendingTool] = useState<any>(null);
+  const [activeToolCall, setActiveToolCall] = useState<string | null>(null);
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, 'up' | 'down'>>({});
   
   const [input, setInput] = useState('');
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const isStreamingRef = useRef(false);  // track streaming để chỉ auto-scroll khi cần
   const isInitialLoadRef = useRef(true); // tránh auto-scroll khi mới load
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Ánh xạ tên Tool sang nhãn tiếng Việt trực quan
+  const getToolLabel = (toolName: string) => {
+    const map: Record<string, string> = {
+      get_my_appointments: 'Đang tra cứu lịch hẹn khám cá nhân...',
+      get_my_medical_history: 'Đang truy xuất hồ sơ bệnh án EMR...',
+      get_my_prescriptions: 'Đang tra cứu đơn thuốc...',
+      get_my_lab_results: 'Đang truy xuất kết quả xét nghiệm...',
+      get_my_billings: 'Đang kiểm tra hóa đơn và viện phí...',
+      get_clinic_services_and_specialties: 'Đang tra cứu chuyên khoa & bảng giá...',
+      get_patient_promotions: 'Đang tìm kiếm chương trình ưu đãi...',
+      search_doctors: 'Đang tìm kiếm thông tin bác sĩ...',
+      create_my_appointment: 'Đang khởi tạo lịch hẹn khám...',
+      cancel_my_appointment: 'Đang xử lý yêu cầu hủy lịch...',
+      get_doctor_schedule: 'Đang tra cứu lịch khám buồng bệnh...',
+      get_patient_summary: 'Đang tổng hợp tóm tắt bệnh án EMR...',
+      get_doctor_patient_history: 'Đang tra cứu tiền sử bệnh nhân...',
+      get_doctor_incomplete_records: 'Đang rà soát hồ sơ chưa hoàn tất...',
+      get_doctor_workload_stats: 'Đang tổng hợp khối lượng công việc...',
+      get_doctor_lab_summary: 'Đang tổng hợp kết quả cận lâm sàng...',
+      check_doctor_schedule_conflicts: 'Đang kiểm tra trùng lịch khám...',
+      get_receptionist_daily_stats: 'Đang thống kê lượt tiếp nhận hôm nay...',
+      get_receptionist_waiting_list: 'Đang lấy danh sách bệnh nhân chờ khám...',
+      get_receptionist_unreceived_patients: 'Đang kiểm tra ca chưa check-in...',
+      check_receptionist_doctor_slots: 'Đang tra cứu khung giờ trống của bác sĩ...',
+      search_patient_profile: 'Đang tra cứu hồ sơ hành chính...',
+      get_doctors_on_duty: 'Đang kiểm tra bác sĩ trực...',
+      get_clinic_services_and_prices: 'Đang tra cứu bảng giá dịch vụ...',
+      get_accountant_revenue_report: 'Đang truy xuất báo cáo doanh thu thực tế...',
+      get_accountant_unpaid_invoices: 'Đang rà soát hóa đơn chưa thanh toán...',
+      get_accountant_failed_payments: 'Đang kiểm tra giao dịch thanh toán thất bại...',
+      get_accountant_reconciliation: 'Đang thực hiện đối soát chứng từ...',
+      get_accountant_revenue_by_service: 'Đang phân tích doanh thu theo dịch vụ...',
+      get_accountant_refund_and_anomalies: 'Đang kiểm tra hoàn tiền & bất thường...',
+      get_system_stats: 'Đang thống kê tổng quan hệ thống...',
+      get_admin_system_overview: 'Đang kiểm tra hoạt động toàn hệ thống...',
+      get_security_audit_anomalies: 'Đang phân tích Audit Log & an ninh...',
+      get_users_list: 'Đang tra cứu danh sách người dùng...',
+      get_admin_revenue_analytics: 'Đang phân tích tăng trưởng doanh thu...',
+      get_ai_service_monitoring: 'Đang giám sát trạng thái dịch vụ AI...',
+      get_specialty_patient_stats: 'Đang thống kê lượt khám theo chuyên khoa...',
+    };
+    return map[toolName] || `Đang xử lý dữ liệu hệ thống (${toolName})...`;
+  };
 
   // Scroll xuống cuối — chỉ gọi khi cần
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -219,7 +271,7 @@ export default function UnifiedAIChatSystem() {
     if (isStreamingRef.current) {
       scrollToBottom('auto');
     }
-  }, [messages]);
+  }, [messages, activeToolCall]);
 
   const fetchConversations = async (selectFirstIfEmpty = true) => {
     try {
@@ -250,7 +302,13 @@ export default function UnifiedAIChatSystem() {
   };
 
   const handleNewChat = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setActiveId(undefined);
+    setActiveToolCall(null);
+    setLoading(false);
     setMessages([{ id: 'intro', role: 'assistant', content: config.introMessage, created_at: new Date().toISOString() }]);
   };
 
@@ -267,16 +325,73 @@ export default function UnifiedAIChatSystem() {
     }
   };
 
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    isStreamingRef.current = false;
+    setLoading(false);
+    setActiveToolCall(null);
+    toast('Đã dừng tạo câu trả lời', { icon: '⏹️' });
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Đã sao chép nội dung vào bộ nhớ tạm');
+  };
+
+  const handleFeedback = (msgId: string, type: 'up' | 'down') => {
+    setFeedbackMap(prev => {
+      const next = { ...prev };
+      if (next[msgId] === type) {
+        delete next[msgId];
+      } else {
+        next[msgId] = type;
+      }
+      return next;
+    });
+    toast.success(type === 'up' ? 'Cảm ơn bạn đã đánh giá câu trả lời hữu ích!' : 'Cảm ơn bạn đã phản hồi, chúng tôi sẽ cải thiện tốt hơn!');
+  };
+
+  const handleRegenerate = () => {
+    if (loading) return;
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg && lastUserMsg.content) {
+      setMessages(prev => {
+        const lastAssistantIdx = prev.map(m => m.role).lastIndexOf('assistant');
+        if (lastAssistantIdx !== -1) {
+          return prev.slice(0, lastAssistantIdx);
+        }
+        return prev;
+      });
+      handleSendMessage(lastUserMsg.content);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+  };
+
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
     
     setInput('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
     const tempMsg = { id: Date.now().toString(), role: 'user', content: text, created_at: new Date().toISOString() };
     setMessages(prev => [...prev, tempMsg]);
     setLoading(true);
+    setActiveToolCall(null);
     isStreamingRef.current = true;
-    // Scroll xuống ngay khi gửi tin nhắn user
     setTimeout(() => scrollToBottom('smooth'), 30);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
     
     try {
       const token = localStorage.getItem('access_token');
@@ -286,7 +401,8 @@ export default function UnifiedAIChatSystem() {
       
       let response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: abortController.signal
       });
 
       // Nếu token hết hạn → thử refresh rồi gọi lại
@@ -303,10 +419,10 @@ export default function UnifiedAIChatSystem() {
               const refreshData = await refreshRes.json();
               localStorage.setItem('access_token', refreshData.access_token);
               localStorage.setItem('refresh_token', refreshData.refresh_token);
-              // Retry với token mới
               response = await fetch(`${base}/api/v1/ai/chat/stream?${params}`, {
                 method: 'GET',
-                headers: { 'Authorization': `Bearer ${refreshData.access_token}` }
+                headers: { 'Authorization': `Bearer ${refreshData.access_token}` },
+                signal: abortController.signal
               });
             } else {
               localStorage.clear();
@@ -336,7 +452,6 @@ export default function UnifiedAIChatSystem() {
 
       const assistantMsgId = Date.now().toString() + 'ai';
       let conversationIdSet = false;
-      let currentActiveId = activeId;
 
       setMessages(prev => [...prev, {
         id: assistantMsgId,
@@ -356,7 +471,6 @@ export default function UnifiedAIChatSystem() {
 
           if (data.conversation_id && !conversationIdSet) {
             conversationIdSet = true;
-            currentActiveId = data.conversation_id;
             if (!activeId) {
               setActiveId(data.conversation_id);
               aiAPI.getConversations().then(res => {
@@ -365,12 +479,22 @@ export default function UnifiedAIChatSystem() {
             }
           }
 
+          if (data.status === 'tool_call' && data.tool_name) {
+            setActiveToolCall(data.tool_name);
+          }
+
           if (typeof data.chunk === 'string') {
+            setActiveToolCall(null);
             fullText += data.chunk;
             setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fullText } : m));
           }
 
+          if (data.status === 'done') {
+            setActiveToolCall(null);
+          }
+
           if (data.error) {
+            setActiveToolCall(null);
             fullText = typeof data.error === 'string'
               ? data.error
               : 'Dịch vụ AI đang tạm gián đoạn. Vui lòng thử lại sau ít phút.';
@@ -381,10 +505,11 @@ export default function UnifiedAIChatSystem() {
           }
 
           if (data.is_tool_call && data.tool_call_details?.requires_confirmation) {
+            setActiveToolCall(null);
             setPendingTool(data.tool_call_details);
           }
         } catch {
-          // Ignore only malformed framing; valid buffered SSE events are processed below.
+          // Ignore partial JSON chunks
         }
       };
 
@@ -404,10 +529,12 @@ export default function UnifiedAIChatSystem() {
 
       eventBuffer += decoder.decode();
       if (eventBuffer.trim()) processEvent(eventBuffer.trim());
-      // Streaming xong, scroll một lần cuối
       scrollToBottom('smooth');
     } catch (err: any) {
-      const errorMsg = err.message || 'Không thể xử lý yêu cầu lúc này.';
+      if (err.name === 'AbortError') {
+        // Người dùng đã nhấn Dừng (Stop Generation)
+        return;
+      }
       setMessages(prev => [...prev, {
         id: Date.now().toString() + 'err',
         role: 'assistant',
@@ -419,6 +546,8 @@ export default function UnifiedAIChatSystem() {
     } finally {
       isStreamingRef.current = false;
       setLoading(false);
+      setActiveToolCall(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -598,21 +727,38 @@ export default function UnifiedAIChatSystem() {
                            </button>
                         </div>
                       ) : msg.content === '' ? (
-                        <div className="flex items-center gap-1.5 h-5 px-1">
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                        </div>
+                        activeToolCall ? (
+                          <div className="flex items-center gap-2 py-1 px-1 text-xs font-medium text-blue-700">
+                            <Database className="w-4 h-4 text-blue-600 animate-spin" />
+                            <span>{getToolLabel(activeToolCall)}...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 h-5 px-1">
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                          </div>
+                        )
                       ) : (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
+                        <div>
+                          {activeToolCall && idx === messages.length - 1 && (
+                            <div className="inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium text-blue-700 bg-blue-50/80 rounded-lg border border-blue-200 mb-2">
+                              <Database className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                              <span>{getToolLabel(activeToolCall)}...</span>
+                            </div>
+                          )}
+                          <div className="overflow-x-auto">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
                       )
                     ) : (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     )}
                     
-                    {/* Timestamp & Hover Actions */}
+                    {/* Timestamp & Actions */}
                     <div className={cn(
                       "absolute -bottom-6 flex items-center gap-2",
                       msg.role === 'user' ? "right-1" : "left-1"
@@ -621,10 +767,38 @@ export default function UnifiedAIChatSystem() {
                         {format(new Date(msg.created_at || new Date()), 'HH:mm')}
                       </span>
                       {msg.role === 'assistant' && !msg.isError && msg.content !== '' && (
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                           <button onClick={() => {navigator.clipboard.writeText(msg.content); toast.success('Đã sao chép');}} className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors" title="Copy">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        <div className="flex items-center gap-1 transition-opacity">
+                           <button 
+                             onClick={() => handleCopy(msg.content)} 
+                             className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-600 transition-colors" 
+                             title="Sao chép nội dung"
+                           >
+                             <Copy className="w-3 h-3" />
                            </button>
+                           <button 
+                             onClick={() => handleFeedback(msg.id, 'up')} 
+                             className={cn("p-1 hover:bg-slate-200/80 rounded transition-colors", feedbackMap[msg.id] === 'up' ? "text-blue-600 bg-blue-50" : "text-slate-400 hover:text-slate-600")}
+                             title="Hữu ích"
+                           >
+                             <ThumbsUp className="w-3 h-3" />
+                           </button>
+                           <button 
+                             onClick={() => handleFeedback(msg.id, 'down')} 
+                             className={cn("p-1 hover:bg-slate-200/80 rounded transition-colors", feedbackMap[msg.id] === 'down' ? "text-red-500 bg-red-50" : "text-slate-400 hover:text-slate-600")}
+                             title="Chưa hài lòng"
+                           >
+                             <ThumbsDown className="w-3 h-3" />
+                           </button>
+                           {idx === messages.length - 1 && !loading && (
+                             <button 
+                               onClick={handleRegenerate}
+                               className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-[10px] font-medium ml-1"
+                               title="Tạo lại phản hồi"
+                             >
+                               <RotateCcw className="w-3 h-3" />
+                               <span>Tạo lại</span>
+                             </button>
+                           )}
                         </div>
                       )}
                     </div>
@@ -637,10 +811,19 @@ export default function UnifiedAIChatSystem() {
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 mt-1 shadow-sm border border-blue-200">
                      <Bot className="w-4 h-4 text-blue-600" />
                   </div>
-                  <div className="px-5 py-4 bg-white border border-slate-200 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  <div className="px-5 py-4 bg-white border border-slate-200 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-2">
+                    {activeToolCall ? (
+                      <div className="flex items-center gap-2 text-xs font-medium text-blue-700">
+                        <Database className="w-4 h-4 text-blue-600 animate-spin" />
+                        <span>{getToolLabel(activeToolCall)}...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 h-5 px-1">
+                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -657,13 +840,17 @@ export default function UnifiedAIChatSystem() {
              </div>
            )}
            
-           {/* ALWAY VISIBLE SUGGESTIONS */}
+           {/* ALWAYS VISIBLE SUGGESTIONS */}
            <div className="max-w-3xl mx-auto mb-2.5 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <span className="text-[11px] text-slate-400 font-medium shrink-0 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-blue-500" /> Gợi ý nhanh:
+              </span>
               {config.suggestedQuestions.map((sq, idx) => (
                 <button 
                   key={idx}
+                  type="button"
                   onClick={() => handleSendMessage(sq)}
-                  className="whitespace-nowrap px-3 py-1.5 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors shadow-sm shrink-0"
+                  className="whitespace-nowrap px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors shadow-sm shrink-0"
                 >
                   {sq}
                 </button>
@@ -677,28 +864,41 @@ export default function UnifiedAIChatSystem() {
                <Paperclip className="w-5 h-5" />
              </button>
              <textarea 
+               ref={textareaRef}
                value={input}
-               onChange={(e) => setInput(e.target.value)}
+               onChange={handleInputChange}
                onKeyDown={(e) => {
                  if (e.key === 'Enter' && !e.shiftKey) {
                    e.preventDefault();
                    handleSendMessage(input);
                  }
                }}
-               placeholder="Nhập câu hỏi của bạn... (Shift + Enter để xuống dòng)"
+               placeholder="Nhập câu hỏi tự nhiên bằng tiếng Việt... (Shift + Enter để xuống dòng)"
                className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 text-sm text-slate-800 placeholder:text-slate-400 min-h-[44px] max-h-32 scrollbar-thin outline-none"
                rows={1}
                disabled={loading}
              />
-             <button 
-               type="submit" 
-               disabled={!input.trim() || loading}
-               className="p-2.5 mb-0.5 bg-[#0B3B78] text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 transition-colors shrink-0 flex items-center justify-center shadow-sm"
-             >
-               <Send className="w-4 h-4 ml-0.5" />
-             </button>
+             {loading ? (
+               <button 
+                 type="button" 
+                 onClick={handleStopGeneration}
+                 className="p-2.5 mb-0.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors shrink-0 flex items-center justify-center shadow-sm"
+                 title="Dừng phản hồi"
+               >
+                 <Square className="w-4 h-4 fill-white" />
+               </button>
+             ) : (
+               <button 
+                 type="submit" 
+                 disabled={!input.trim()}
+                 className="p-2.5 mb-0.5 bg-[#0B3B78] text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 transition-colors shrink-0 flex items-center justify-center shadow-sm"
+                 title="Gửi câu hỏi"
+               >
+                 <Send className="w-4 h-4 ml-0.5" />
+               </button>
+             )}
            </form>
-           <p className="text-center text-[10px] text-slate-400 mt-2">AI có thể mắc lỗi. Vui lòng kiểm tra lại thông tin quan trọng.</p>
+           <p className="text-center text-[10px] text-slate-400 mt-2">Hội thoại AI tạo sinh kết nối trực tiếp cơ sở dữ liệu phòng khám • Tự do đặt câu hỏi bằng ngôn ngữ tự nhiên</p>
         </div>
       </div>
 
