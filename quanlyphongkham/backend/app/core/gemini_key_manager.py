@@ -15,12 +15,14 @@ class GeminiKeyManager:
     khi gặp lỗi 429 (quota exhausted) hoặc rate limit.
     """
 
+    COOLDOWN_SECONDS = 30.0  # Hạn mức per-minute free-tier hồi phục sau khoảng 30 giây
+
     def __init__(self, keys: List[str]):
         if not keys:
             raise ValueError("Cần ít nhất một Gemini API key")
         self._keys = [k.strip() for k in keys if k.strip()]
         self._current_index = 0
-        self._failed_keys: set = set()
+        self._failed_keys: dict = {}  # key -> timestamp lỗi
         logger.info(f"[GeminiKeyManager] Đã nạp {len(self._keys)} API key(s)")
 
     @property
@@ -43,27 +45,37 @@ class GeminiKeyManager:
 
     def rotate(self) -> Optional[str]:
         """
-        Đánh dấu key hiện tại là failed và chuyển sang key tiếp theo.
-        Trả về key mới hoặc None nếu tất cả đã hết quota.
+        Đánh dấu key hiện tại là đang trong cooldown và chuyển sang key tiếp theo.
+        Tự động tái kích hoạt key khi thời gian cooldown (30s) trôi qua.
         """
-        self._failed_keys.add(self._keys[self._current_index])
+        import time
+        now = time.time()
+        self._failed_keys[self._keys[self._current_index]] = now
         logger.warning(
-            f"[GeminiKeyManager] Key #{self._current_index + 1} hết quota. "
+            f"[GeminiKeyManager] Key #{self._current_index + 1} hết quota/rate-limit. "
             f"Đang chuyển sang key tiếp theo..."
         )
 
-        # Tìm key tiếp theo chưa fail
+        # 1. Tìm key tiếp theo đã hết cooldown (> 30s) hoặc chưa từng lỗi
         for i in range(len(self._keys)):
             next_index = (self._current_index + 1 + i) % len(self._keys)
-            if self._keys[next_index] not in self._failed_keys:
+            key = self._keys[next_index]
+            last_failed = self._failed_keys.get(key, 0)
+            if now - last_failed > self.COOLDOWN_SECONDS:
                 self._current_index = next_index
                 logger.info(
                     f"[GeminiKeyManager] Đã chuyển sang key #{self._current_index + 1}"
                 )
                 return self._keys[self._current_index]
 
-        logger.error("[GeminiKeyManager] Tất cả API key đã hết quota!")
-        return None
+        # 2. Nếu tất cả key đều đang trong cooldown, chọn key có thời gian chờ lâu nhất
+        oldest_key = min(self._keys, key=lambda k: self._failed_keys.get(k, 0))
+        self._current_index = self._keys.index(oldest_key)
+        logger.warning(
+            f"[GeminiKeyManager] Tất cả key đều có cảnh báo rate limit gần đây. "
+            f"Tái sử dụng key #{self._current_index + 1} (thời gian chờ lâu nhất)."
+        )
+        return oldest_key
 
     def get_model_name(self) -> str:
         """

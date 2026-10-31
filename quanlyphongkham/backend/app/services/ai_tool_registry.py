@@ -112,6 +112,25 @@ class AIToolRegistry:
             True
         )
 
+        # check_doctor_slots — Tra cứu lịch làm việc và khung giờ trống của bác sĩ
+        self.tools["check_doctor_slots"] = (
+            {
+                "name": "check_doctor_slots",
+                "description": "Kiểm tra lịch làm việc, danh sách bác sĩ trực và các khung giờ khám còn trống (available slots) của bác sĩ theo chuyên khoa (VD: Da liễu, Nhi khoa, Nội tổng quát, Tim mạch) vào ngày mai, chiều mai, hôm nay hoặc ngày chỉ định.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "specialty_name": {"type": "STRING", "description": "Tên chuyên khoa cần kiểm tra (VD: 'Da liễu', 'Nhi khoa', 'Nội tổng quát', 'Tim mạch')."},
+                        "doctor_name": {"type": "STRING", "description": "Tên bác sĩ cụ thể (nếu có)."},
+                        "date": {"type": "STRING", "description": "Ngày kiểm tra (VD: 'tomorrow', 'ngày mai', 'chieu mai', 'chiều mai', 'today', 'hôm nay', 'YYYY-MM-DD'). Mặc định là ngày mai."},
+                        "time_period": {"type": "STRING", "description": "Buổi khám: 'morning' (sáng), 'afternoon' (chiều), hoặc 'all'. Mặc định là 'all'."}
+                    }
+                }
+            },
+            self._handle_check_receptionist_doctor_slots,
+            False
+        )
+
         # get_my_medical_history — lịch sử khám bệnh của bệnh nhân
         self.tools["get_my_medical_history"] = (
             {

@@ -227,18 +227,28 @@ class AICoreService:
                     },
                 }
 
-            # Gửi kết quả tool về cho Gemini để tổng hợp câu trả lời
-            try:
-                part = protos.Part(
-                    function_response=protos.FunctionResponse(
-                        name=func_name,
-                        response={"result": str(tool_result)}
-                    )
+            # Gửi kết quả tool về cho Gemini để tổng hợp câu trả lời (kèm retry và rotation)
+            part = protos.Part(
+                function_response=protos.FunctionResponse(
+                    name=func_name,
+                    response={"result": str(tool_result)}
                 )
-                response = await asyncio.wait_for(chat.send_message_async(part), timeout=30.0)
-            except Exception as e:
-                logger.error(f"Error returning tool response to Gemini: {e}")
-                fallback_msg = _handle_gemini_error(e)
+            )
+            tool_response_ok = False
+            for attempt in range(len(gemini_key_manager._keys)):
+                try:
+                    response = await asyncio.wait_for(chat.send_message_async(part), timeout=30.0)
+                    tool_response_ok = True
+                    break
+                except Exception as e:
+                    logger.warning(f"Error returning tool response attempt {attempt + 1}: {e}")
+                    new_key = gemini_key_manager.rotate()
+                    if new_key:
+                        gemini_key_manager.configure_genai()
+                        await asyncio.sleep(0.5)
+
+            if not tool_response_ok:
+                fallback_msg = _handle_gemini_error(Exception("quota exhausted"))
                 await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
                 return {"conversation_id": conversation_id, "response": fallback_msg, "is_tool_call": False}
 
@@ -417,17 +427,35 @@ class AICoreService:
                     yield confirmation
                     return
 
-                # Đóng gói và trả kết quả tool về cho Gemini
+                # Đóng gói và trả kết quả tool về cho Gemini (kèm retry và rotation)
                 part = protos.Part(
                     function_response=protos.FunctionResponse(
                         name=func_name,
                         response={"result": str(tool_result)}
                     )
                 )
-                response_generator = await asyncio.wait_for(
-                    chat.send_message_async(part, stream=True),
-                    timeout=30.0
-                )
+                tool_stream_ok = False
+                for attempt in range(len(gemini_key_manager._keys)):
+                    try:
+                        response_generator = await asyncio.wait_for(
+                            chat.send_message_async(part, stream=True),
+                            timeout=30.0
+                        )
+                        tool_stream_ok = True
+                        break
+                    except Exception as e:
+                        logger.warning(f"Error returning tool stream attempt {attempt + 1}: {e}")
+                        new_key = gemini_key_manager.rotate()
+                        if new_key:
+                            gemini_key_manager.configure_genai()
+                            await asyncio.sleep(0.5)
+
+                if not tool_stream_ok:
+                    fallback_msg = _handle_gemini_error(Exception("quota exhausted"))
+                    yield {"chunk": fallback_msg}
+                    yield {"status": "done"}
+                    await ai_conversation_service.add_message(db, conversation_id, "assistant", fallback_msg)
+                    return
 
             if not final_text.strip():
                 final_text = "Tôi đã xử lý yêu cầu nhưng chưa nhận được phản hồi phù hợp. Vui lòng thử lại hoặc diễn đạt yêu cầu cụ thể hơn."
